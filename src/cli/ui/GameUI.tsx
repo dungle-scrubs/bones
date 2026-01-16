@@ -152,8 +152,10 @@ export function GameUI({ gameId, orchestrator }: Props) {
 					let activity = prev?.activity ?? [];
 
 					// Detect new findings
+					// Findings are sorted DESC (newest first), so new findings are at the start
 					if (findings.length > prevFindingCount) {
-						const newFindings = findings.slice(prevFindingCount);
+						const newCount = findings.length - prevFindingCount;
+						const newFindings = findings.slice(0, newCount);
 						// Create new array with new messages appended
 						activity = [
 							...activity,
