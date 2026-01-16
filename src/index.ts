@@ -24,6 +24,7 @@ Usage: code-hunt <command> [args]
 
 Game Flow Commands:
   setup <url> [options]     Create a new game
+    --web, -w               Start API server and dashboard, print URLs
     --category, -c <type>   Category: bugs|doc_drift|security|test_coverage|tech_debt|custom
     --focus, -f <text>      Additional focus (merged with category)
     --prompt, -p <text>     Custom prompt (sets category to custom)

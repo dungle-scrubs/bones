@@ -14,15 +14,25 @@ export class Commands {
 		const projectUrl = args[0];
 		if (!projectUrl) {
 			return JSON.stringify({
-				error: `Usage: setup <project_url> [--category <${VALID_CATEGORIES.join("|")}>] [--focus <additional_prompt>] [--target <score>] [--hunt-duration <seconds>] [--review-duration <seconds>] [--agents <count>] [--max-rounds <count|0>]`,
+				error: `Usage: setup <project_url> [--web] [--category <${VALID_CATEGORIES.join("|")}>] [--focus <additional_prompt>] [--target <score>] [--hunt-duration <seconds>] [--review-duration <seconds>] [--agents <count>] [--max-rounds <count|0>]`,
 			});
 		}
 
 		const config: SetupConfig = { projectUrl };
+		let startWeb = false;
 
 		// Parse optional arguments
-		for (let i = 1; i < args.length; i += 2) {
+		let i = 1;
+		while (i < args.length) {
 			const flag = args[i];
+
+			// Handle boolean flags (no value)
+			if (flag === "--web" || flag === "-w") {
+				startWeb = true;
+				i += 1;
+				continue;
+			}
+
 			const value = args[i + 1];
 
 			if (value === undefined) {
@@ -106,13 +116,11 @@ export class Commands {
 				}
 				default:
 					return JSON.stringify({
-						error: `Unknown flag: ${flag}. Valid flags: --category, --focus, --prompt, --target, --hunt-duration, --review-duration, --agents, --max-rounds`,
+						error: `Unknown flag: ${flag}. Valid flags: --web, --category, --focus, --prompt, --target, --hunt-duration, --review-duration, --agents, --max-rounds`,
 					});
 			}
+			i += 2;
 		}
-
-		// Auto-start dashboard first (before setup can fail)
-		const dashboard = await ensureDashboardRunning();
 
 		// Check for conflicts between userPrompt and category exclusions
 		const conflicts = this.orchestrator.checkConflicts(config);
@@ -121,22 +129,31 @@ export class Commands {
 		}
 
 		const result = this.orchestrator.setup(config);
-		const dashboardUrl = getDashboardUrl(result.gameId);
 
-		// Print dashboard URL prominently (separate from JSON for clickability)
-		console.log(`\n📊 Dashboard: ${dashboardUrl}\n`);
+		// Start web services if --web flag provided
+		if (startWeb) {
+			const dashboard = await ensureDashboardRunning();
+			const dashboardUrl = getDashboardUrl(result.gameId);
 
-		return JSON.stringify(
-			{
-				...result,
-				dashboard: {
-					url: dashboardUrl,
-					started: dashboard.started,
+			// Print URLs prominently
+			console.log(`\n🌐 API Server: ${dashboard.api.url}`);
+			console.log(`📊 Dashboard:  ${dashboardUrl}\n`);
+
+			return JSON.stringify(
+				{
+					...result,
+					dashboard: {
+						url: dashboardUrl,
+						api: dashboard.api.url,
+						started: dashboard.started,
+					},
 				},
-			},
-			null,
-			2,
-		);
+				null,
+				2,
+			);
+		}
+
+		return JSON.stringify(result, null, 2);
 	}
 
 	startHunt(args: string[]): string {
