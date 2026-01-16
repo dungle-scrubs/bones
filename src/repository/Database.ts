@@ -64,6 +64,10 @@ CREATE TABLE IF NOT EXISTS findings (
   points_awarded INTEGER DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now')),
   validated_at TEXT,
+  confidence_score INTEGER,
+  bug_category TEXT,
+  verification_status TEXT DEFAULT 'none',
+  verifier_explanation TEXT,
   FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE,
   FOREIGN KEY (agent_id) REFERENCES agents(id) ON DELETE CASCADE,
   FOREIGN KEY (duplicate_of) REFERENCES findings(id)
@@ -134,6 +138,29 @@ export class Database {
 		// Add confidence column if missing (migration for existing DBs)
 		try {
 			this.db.exec("ALTER TABLE findings ADD COLUMN confidence TEXT");
+		} catch {
+			// Column already exists
+		}
+		// Add verification columns if missing (migration for existing DBs)
+		try {
+			this.db.exec("ALTER TABLE findings ADD COLUMN confidence_score INTEGER");
+		} catch {
+			// Column already exists
+		}
+		try {
+			this.db.exec("ALTER TABLE findings ADD COLUMN bug_category TEXT");
+		} catch {
+			// Column already exists
+		}
+		try {
+			this.db.exec(
+				"ALTER TABLE findings ADD COLUMN verification_status TEXT DEFAULT 'none'",
+			);
+		} catch {
+			// Column already exists
+		}
+		try {
+			this.db.exec("ALTER TABLE findings ADD COLUMN verifier_explanation TEXT");
 		} catch {
 			// Column already exists
 		}

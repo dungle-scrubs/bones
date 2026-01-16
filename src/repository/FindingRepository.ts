@@ -243,7 +243,11 @@ export class FindingRepository {
         referee_verdict = ?,
         confidence = ?,
         points_awarded = ?,
-        validated_at = ?
+        validated_at = ?,
+        confidence_score = ?,
+        bug_category = ?,
+        verification_status = ?,
+        verifier_explanation = ?
       WHERE id = ?
     `);
 
@@ -254,8 +258,34 @@ export class FindingRepository {
 			row.confidence,
 			row.points_awarded,
 			row.validated_at,
+			row.confidence_score,
+			row.bug_category,
+			row.verification_status,
+			row.verifier_explanation,
 			row.id,
 		);
+	}
+
+	/** Lists findings pending verification after initial validation. */
+	findPendingVerification(gameId: string): Finding[] {
+		const stmt = this.db.connection.prepare(`
+      SELECT * FROM findings
+      WHERE game_id = ? AND verification_status = 'pending'
+      ORDER BY created_at ASC
+    `);
+		const rows = stmt.all(gameId) as FindingRow[];
+		return rows.map(Finding.fromRow);
+	}
+
+	/** Lists findings pending verification for a specific round. */
+	findPendingVerificationByRound(gameId: string, round: number): Finding[] {
+		const stmt = this.db.connection.prepare(`
+      SELECT * FROM findings
+      WHERE game_id = ? AND round_number = ? AND verification_status = 'pending'
+      ORDER BY created_at ASC
+    `);
+		const rows = stmt.all(gameId, round) as FindingRow[];
+		return rows.map(Finding.fromRow);
 	}
 
 	/** Returns total number of findings submitted in a game. */
