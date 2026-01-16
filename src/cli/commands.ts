@@ -225,12 +225,17 @@ export class Commands {
 			});
 		}
 
-		// Determine if new or legacy format based on arg5
+		// Determine if new or legacy format based on arg5 AND arg6
+		// New format requires: confidence_score (0-100) AND bug_category
+		// Legacy format may have: duplicate_of_id (any integer) or confidence (high|medium|low)
+		const validCategories = Object.values(BugCategory) as string[];
 		const isNewFormat =
 			arg5 !== undefined &&
 			!Number.isNaN(parseInt(arg5, 10)) &&
 			parseInt(arg5, 10) >= 0 &&
-			parseInt(arg5, 10) <= 100;
+			parseInt(arg5, 10) <= 100 &&
+			arg6 !== undefined &&
+			validCategories.includes(arg6);
 
 		let confidence: "high" | "medium" | "low" | undefined;
 		let confidenceScore: number | undefined;
@@ -251,16 +256,8 @@ export class Commands {
 				confidence = "low";
 			}
 
-			// Parse bug_category
-			if (arg6) {
-				const validCategories = Object.values(BugCategory) as string[];
-				if (!validCategories.includes(arg6)) {
-					return JSON.stringify({
-						error: `Invalid bug_category: ${arg6}. Valid values: ${validCategories.join(", ")}`,
-					});
-				}
-				bugCategory = arg6 as BugCategory;
-			}
+			// Parse bug_category (already validated in isNewFormat check)
+			bugCategory = arg6 as BugCategory;
 
 			// Parse needs_verification
 			if (arg7) {
