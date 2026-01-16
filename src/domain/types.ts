@@ -1,4 +1,7 @@
-// Game phases - must progress in order
+/**
+ * Game phases that define the state machine for a Code Hunt session.
+ * Phases progress in order with ReviewScoring looping back to Hunt for new rounds.
+ */
 export enum Phase {
 	Setup = "setup",
 	Hunt = "hunt",
@@ -8,7 +11,10 @@ export enum Phase {
 	Complete = "complete",
 }
 
-// Valid phase transitions
+/**
+ * Maps each phase to its valid next phase, defining the game state machine.
+ * ReviewScoring can transition to either Hunt (new round) or Complete (game over).
+ */
 export const PHASE_TRANSITIONS: Record<Phase, Phase | null> = {
 	[Phase.Setup]: Phase.Hunt,
 	[Phase.Hunt]: Phase.HuntScoring,
@@ -18,6 +24,7 @@ export const PHASE_TRANSITIONS: Record<Phase, Phase | null> = {
 	[Phase.Complete]: null,
 };
 
+/** Status of a finding after referee validation. */
 export enum FindingStatus {
 	Pending = "pending",
 	Valid = "valid",
@@ -25,19 +32,24 @@ export enum FindingStatus {
 	Duplicate = "duplicate",
 }
 
+/** Status of a dispute after referee resolution. */
 export enum DisputeStatus {
 	Pending = "pending",
 	Successful = "successful",
 	Failed = "failed",
 }
 
+/** Lifecycle status of an agent in the game. */
 export enum AgentStatus {
 	Active = "active",
 	Eliminated = "eliminated",
 	Winner = "winner",
 }
 
-// Scoring constants
+/**
+ * Point values for different game outcomes.
+ * Designed to reward accuracy and penalize spam/duplicates.
+ */
 export const SCORING = {
 	VALID_FINDING: 1,
 	FALSE_FLAG: -2,
@@ -46,7 +58,7 @@ export const SCORING = {
 	DISPUTE_LOST: -1,
 } as const;
 
-// Default hunt prompt for bug hunting
+/** Default hunt prompt used when category is 'bugs' with no custom context. */
 export const DEFAULT_HUNT_PROMPT = `
 Find **real, demonstrable bugs** in this codebase.
 
@@ -72,7 +84,10 @@ For each finding, you MUST:
 3. Show why the code fails (not just "might fail")
 `.trim();
 
-// Hunt categories with built-in context
+/**
+ * Predefined hunt categories with built-in prompts and validation guidance.
+ * Each category focuses agents on a specific type of issue (bugs, security, etc.).
+ */
 export enum HuntCategory {
 	Bugs = "bugs",
 	DocumentationDrift = "doc_drift",
@@ -82,17 +97,24 @@ export enum HuntCategory {
 	Custom = "custom",
 }
 
-// Category-specific context for hunting and validation
+/**
+ * Configuration for a hunt category defining what counts as valid/invalid.
+ * Used to generate agent prompts and guide referee validation.
+ */
 export interface CategoryContext {
 	description: string;
 	validExamples: string[];
 	exclusions: string[];
 	focusPatterns?: string[];
-	discoveryStep?: string; // Instructions to enumerate targets before hunting
+	/** Instructions to enumerate targets before hunting (e.g., find all docs first). */
+	discoveryStep?: string;
 	validationGuidance: string;
 }
 
-// Built-in category contexts
+/**
+ * Built-in category contexts with curated prompts for common hunt types.
+ * Custom category has null context - user provides everything.
+ */
 export const CATEGORY_CONTEXTS: Record<HuntCategory, CategoryContext | null> = {
 	[HuntCategory.Bugs]: {
 		description: "Find **real, demonstrable bugs** in this codebase.",
@@ -230,20 +252,26 @@ Check each discovered file for contradictions with actual code behavior.`,
 	[HuntCategory.Custom]: null, // User provides full context
 };
 
-// Conflict between user prompt and category exclusions
+/**
+ * Represents a detected conflict between user's focus prompt and category exclusions.
+ * Warns users when they ask for things the category explicitly excludes.
+ */
 export interface PromptConflict {
 	exclusion: string;
 	matchedKeywords: string[];
 	promptExcerpt: string;
 }
 
-// Result of conflict detection
+/** Result of checking user prompt against category exclusions. */
 export interface ConflictDetectionResult {
 	hasConflicts: boolean;
 	conflicts: PromptConflict[];
 }
 
-// Detect conflicts between user prompt and category exclusions
+/**
+ * Checks if the user's focus prompt conflicts with the category's exclusions.
+ * Prevents users from accidentally requesting things that will be marked as false positives.
+ */
 export function detectPromptConflicts(
 	category: HuntCategory,
 	userPrompt: string | null,
@@ -284,7 +312,10 @@ export function detectPromptConflicts(
 	return { hasConflicts: conflicts.length > 0, conflicts };
 }
 
-// Extract keywords from exclusion text for matching
+/**
+ * Extracts meaningful keywords from exclusion text for conflict matching.
+ * Removes stop words to focus on domain-specific terms.
+ */
 function extractConflictKeywords(exclusion: string): string[] {
 	const stopWords = new Set([
 		"a",
@@ -368,7 +399,11 @@ function extractConflictKeywords(exclusion: string): string[] {
 		.filter((w) => w.length > 2 && !stopWords.has(w));
 }
 
-// Build the complete hunt prompt from category + user additions
+/**
+ * Builds the complete hunt prompt combining category context with user additions.
+ * For custom category, returns user prompt directly. For built-in categories,
+ * constructs a structured prompt with valid examples, exclusions, and focus areas.
+ */
 export function buildHuntPrompt(
 	category: HuntCategory,
 	userPrompt: string | null,
@@ -425,25 +460,32 @@ export function buildHuntPrompt(
 	return parts.join("\n");
 }
 
-// Get validation guidance for referee
+/**
+ * Returns category-specific guidance for the referee when validating findings.
+ * Helps ensure consistent validation standards across different hunt types.
+ */
 export function getValidationGuidance(category: HuntCategory): string | null {
 	const ctx = CATEGORY_CONTEXTS[category];
 	return ctx?.validationGuidance ?? null;
 }
 
-// Configuration for creating a new game
+/** Configuration for creating a new game session. */
 export interface GameConfig {
 	projectUrl: string;
 	category: HuntCategory;
-	userPrompt: string | null; // Additional focus, merged with category context
+	/** Additional focus prompt merged with category context. */
+	userPrompt: string | null;
 	targetScore: number;
-	huntDuration: number; // seconds
-	reviewDuration: number; // seconds
+	/** Hunt phase duration in seconds. */
+	huntDuration: number;
+	/** Review phase duration in seconds. */
+	reviewDuration: number;
 	numAgents: number;
-	maxRounds: number; // 0 = no limit, default 3
+	/** Maximum rounds before tiebreaker. 0 = no limit, default 3. */
+	maxRounds: number;
 }
 
-// Agent statistics
+/** Accumulated statistics for an agent's performance. */
 export interface AgentStats {
 	findingsSubmitted: number;
 	findingsValid: number;
@@ -453,7 +495,7 @@ export interface AgentStats {
 	disputesLost: number;
 }
 
-// Scoreboard entry for display
+/** Agent data formatted for display in the scoreboard UI. */
 export interface ScoreboardEntry {
 	id: string;
 	score: number;
@@ -466,7 +508,12 @@ export interface ScoreboardEntry {
 	status: AgentStatus;
 }
 
-// Result types for orchestrator operations
+// =============================================================================
+// Orchestrator Result Types
+// These types define the JSON responses returned by CLI commands to the caller.
+// =============================================================================
+
+/** Returned by setup command after creating a new game. */
 export interface SetupResult {
 	action: "GAME_CREATED";
 	gameId: string;
@@ -475,6 +522,7 @@ export interface SetupResult {
 	next: string;
 }
 
+/** Returned by start-hunt command with agent prompts to spawn. */
 export interface HuntPhaseResult {
 	action: "SPAWN_HUNT_AGENTS";
 	round: number;
@@ -485,6 +533,7 @@ export interface HuntPhaseResult {
 	instructions: string[];
 }
 
+/** Returned by check-hunt command with phase status. */
 export interface HuntCheckResult {
 	round: number;
 	timeExpired: boolean;
@@ -495,6 +544,7 @@ export interface HuntCheckResult {
 	next: string;
 }
 
+/** Returned by start-hunt-scoring with validation prompts for each finding. */
 export interface ScoringPhaseResult {
 	action: "VALIDATE_FINDINGS";
 	round: number;
@@ -508,6 +558,7 @@ export interface ScoringPhaseResult {
 	instructions: string[];
 }
 
+/** Returned by start-review command with review prompts for agents. */
 export interface ReviewPhaseResult {
 	action: "SPAWN_REVIEW_AGENTS";
 	round: number;
@@ -519,6 +570,7 @@ export interface ReviewPhaseResult {
 	instructions: string[];
 }
 
+/** Returned by check-review command with phase status. */
 export interface ReviewCheckResult {
 	round: number;
 	timeExpired: boolean;
@@ -529,6 +581,7 @@ export interface ReviewCheckResult {
 	next: string;
 }
 
+/** Returned by start-review-scoring with resolution prompts for disputes. */
 export interface DisputeScoringResult {
 	action: "RESOLVE_DISPUTES";
 	round: number;
@@ -543,6 +596,7 @@ export interface DisputeScoringResult {
 	instructions: string[];
 }
 
+/** Returned by check-winner to determine if game should continue or end. */
 export interface WinnerCheckResult {
 	action: "GAME_COMPLETE" | "TIE_BREAKER" | "CONTINUE";
 	winner?: string;
@@ -553,7 +607,12 @@ export interface WinnerCheckResult {
 	next?: string;
 }
 
-// Database row types (for repository layer)
+// =============================================================================
+// Database Row Types
+// These match the SQLite table schemas with snake_case column names.
+// =============================================================================
+
+/** SQLite row format for games table. */
 export interface GameRow {
 	id: string;
 	project_url: string;
@@ -572,6 +631,7 @@ export interface GameRow {
 	completed_at: string | null;
 }
 
+/** SQLite row format for agents table. */
 export interface AgentRow {
 	id: string;
 	game_id: string;
@@ -589,8 +649,10 @@ export interface AgentRow {
 	created_at: string;
 }
 
+/** Referee's confidence level in a validation decision. */
 export type Confidence = "high" | "medium" | "low";
 
+/** SQLite row format for findings table. */
 export interface FindingRow {
 	id: number;
 	game_id: string;
@@ -611,6 +673,7 @@ export interface FindingRow {
 	validated_at: string | null;
 }
 
+/** SQLite row format for disputes table. */
 export interface DisputeRow {
 	id: number;
 	game_id: string;

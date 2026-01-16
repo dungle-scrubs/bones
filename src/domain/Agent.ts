@@ -1,5 +1,10 @@
 import { type AgentRow, type AgentStats, AgentStatus } from "./types.js";
 
+/**
+ * Represents a competing agent in the Code Hunt game.
+ * Tracks the agent's score, statistics, and lifecycle through hunt/review phases.
+ * Agents compete by submitting findings and disputing others' findings.
+ */
 export class Agent {
 	constructor(
 		public readonly id: string,
@@ -45,42 +50,75 @@ export class Agent {
 		return this._status === AgentStatus.Eliminated;
 	}
 
+	/**
+	 * Checks if agent has signaled completion for the hunt phase of a given round.
+	 * Prevents agents from continuing to submit after declaring done.
+	 */
 	hasFinishedHunt(round: number): boolean {
 		return this._huntDoneRound >= round;
 	}
 
+	/**
+	 * Checks if agent has signaled completion for the review phase of a given round.
+	 * Prevents agents from continuing to dispute after declaring done.
+	 */
 	hasFinishedReview(round: number): boolean {
 		return this._reviewDoneRound >= round;
 	}
 
+	/**
+	 * Modifies the agent's score by the given point delta.
+	 * Can be positive (valid findings, successful disputes) or negative (false flags, failed disputes).
+	 */
 	awardPoints(points: number): void {
 		this._score += points;
 	}
 
+	/**
+	 * Increments the valid findings counter after referee confirms a finding.
+	 * Note: findingsSubmitted is incremented separately by FindingRepository.create().
+	 */
 	recordValidFinding(): void {
-		// Note: findingsSubmitted is incremented by FindingRepository.create()
 		this._stats.findingsValid++;
 	}
 
+	/**
+	 * Increments the false findings counter after referee rejects a finding.
+	 * Note: findingsSubmitted is incremented separately by FindingRepository.create().
+	 */
 	recordFalseFinding(): void {
-		// Note: findingsSubmitted is incremented by FindingRepository.create()
 		this._stats.findingsFalse++;
 	}
 
+	/**
+	 * Increments the duplicate findings counter after referee identifies a duplicate.
+	 * Note: findingsSubmitted is incremented separately by FindingRepository.create().
+	 */
 	recordDuplicateFinding(): void {
-		// Note: findingsSubmitted is incremented by FindingRepository.create()
 		this._stats.findingsDuplicate++;
 	}
 
+	/**
+	 * Increments the disputes won counter after a successful challenge.
+	 * Called when this agent's dispute overturns another agent's finding.
+	 */
 	recordDisputeWon(): void {
 		this._stats.disputesWon++;
 	}
 
+	/**
+	 * Increments the disputes lost counter after a failed challenge.
+	 * Called when this agent's dispute is rejected by the referee.
+	 */
 	recordDisputeLost(): void {
 		this._stats.disputesLost++;
 	}
 
-	// Called when a valid finding is overturned by a successful dispute
+	/**
+	 * Adjusts stats when a previously valid finding is overturned by dispute.
+	 * Moves one count from findingsValid to findingsFalse to maintain accuracy.
+	 * @throws Error if findingsValid is already 0 (invariant violation)
+	 */
 	revertValidToFalse(): void {
 		if (this._stats.findingsValid <= 0) {
 			throw new Error("Cannot revert: findingsValid is already 0");
@@ -89,27 +127,50 @@ export class Agent {
 		this._stats.findingsFalse++;
 	}
 
+	/**
+	 * Marks the agent as done with the hunt phase for the specified round.
+	 * Once called, agent cannot submit more findings until next round.
+	 */
 	finishHunt(round: number): void {
 		this._huntDoneRound = round;
 	}
 
+	/**
+	 * Marks the agent as done with the review phase for the specified round.
+	 * Once called, agent cannot submit more disputes until next round.
+	 */
 	finishReview(round: number): void {
 		this._reviewDoneRound = round;
 	}
 
+	/**
+	 * Removes the agent from active competition.
+	 * Eliminated agents cannot submit findings or disputes.
+	 */
 	eliminate(): void {
 		this._status = AgentStatus.Eliminated;
 	}
 
+	/**
+	 * Marks this agent as the game winner.
+	 * Called when agent reaches target score or wins tiebreaker.
+	 */
 	declareWinner(): void {
 		this._status = AgentStatus.Winner;
 	}
 
+	/**
+	 * Updates the last heartbeat timestamp to now.
+	 * Used to detect stalled/crashed agents during timed phases.
+	 */
 	heartbeat(): void {
 		this._lastHeartbeat = new Date();
 	}
 
-	// Factory method to create new agent
+	/**
+	 * Creates a new agent with zeroed stats and active status.
+	 * Called at game setup to initialize the competing agents.
+	 */
 	static create(id: string, gameId: string): Agent {
 		return new Agent(
 			id,
@@ -131,7 +192,10 @@ export class Agent {
 		);
 	}
 
-	// Factory method from database row
+	/**
+	 * Reconstitutes an agent domain object from its database representation.
+	 * Maps snake_case columns to camelCase properties and parses dates.
+	 */
 	static fromRow(row: AgentRow): Agent {
 		return new Agent(
 			row.id,
@@ -153,7 +217,10 @@ export class Agent {
 		);
 	}
 
-	// Convert to database row format
+	/**
+	 * Serializes the agent to database row format for persistence.
+	 * Maps camelCase properties to snake_case columns and formats dates as ISO strings.
+	 */
 	toRow(): AgentRow {
 		return {
 			id: this.id,

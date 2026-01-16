@@ -1,5 +1,10 @@
 import { type DisputeRow, DisputeStatus, SCORING } from "./types.js";
 
+/**
+ * Represents a challenge against another agent's finding during the review phase.
+ * Disputes allow agents to earn points by identifying false positives in others' findings.
+ * Successful disputes overturn the original finding and penalize its submitter.
+ */
 export class Dispute {
 	constructor(
 		public readonly id: number,
@@ -43,7 +48,13 @@ export class Dispute {
 		return this._status === DisputeStatus.Failed;
 	}
 
-	// Resolve dispute as successful (disputer was right)
+	/**
+	 * Marks the dispute as successful, awarding points to the disputer.
+	 * Called when the referee determines the original finding was incorrect.
+	 * The original finding gets revoked and its submitter loses points.
+	 * @returns Points awarded to the disputer (positive)
+	 * @throws Error if dispute is not in pending status
+	 */
 	resolveSuccessful(verdict: string): number {
 		if (this._status !== DisputeStatus.Pending) {
 			throw new Error(`Cannot resolve dispute with status: ${this._status}`);
@@ -55,7 +66,13 @@ export class Dispute {
 		return this._pointsAwarded;
 	}
 
-	// Resolve dispute as failed (original finding was correct)
+	/**
+	 * Marks the dispute as failed, penalizing the disputer.
+	 * Called when the referee confirms the original finding was valid.
+	 * The disputer loses points for the frivolous challenge.
+	 * @returns Points awarded to the disputer (negative)
+	 * @throws Error if dispute is not in pending status
+	 */
 	resolveFailed(verdict: string): number {
 		if (this._status !== DisputeStatus.Pending) {
 			throw new Error(`Cannot resolve dispute with status: ${this._status}`);
@@ -67,7 +84,10 @@ export class Dispute {
 		return this._pointsAwarded;
 	}
 
-	// Factory method to create new dispute
+	/**
+	 * Creates a new pending dispute against an existing finding.
+	 * Called when an agent challenges another agent's finding during review phase.
+	 */
 	static create(
 		id: number,
 		gameId: string,
@@ -91,7 +111,10 @@ export class Dispute {
 		);
 	}
 
-	// Factory method from database row
+	/**
+	 * Reconstitutes a dispute domain object from its database representation.
+	 * Maps snake_case columns to camelCase properties and parses dates.
+	 */
 	static fromRow(row: DisputeRow): Dispute {
 		return new Dispute(
 			row.id,
@@ -108,7 +131,10 @@ export class Dispute {
 		);
 	}
 
-	// Convert to database row format
+	/**
+	 * Serializes the dispute to database row format for persistence.
+	 * Maps camelCase properties to snake_case columns and formats dates as ISO strings.
+	 */
 	toRow(): DisputeRow {
 		return {
 			id: this.id,

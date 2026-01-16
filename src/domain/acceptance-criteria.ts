@@ -36,6 +36,7 @@ export interface AcceptanceCriteria {
 	edgeCases: EdgeCaseRuling[];
 }
 
+/** Defines how to rule on specific edge case scenarios during finding validation. */
 export interface EdgeCaseRuling {
 	scenario: string;
 	ruling: "VALID" | "INVALID";

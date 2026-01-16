@@ -6,6 +6,11 @@ import {
 	SCORING,
 } from "./types.js";
 
+/**
+ * Represents a bug/issue discovered by an agent during the hunt phase.
+ * Findings are submitted with a file location, description, and optional code snippet.
+ * They go through validation by the referee and can be disputed by other agents.
+ */
 export class Finding {
 	constructor(
 		public readonly id: number,
@@ -67,8 +72,11 @@ export class Finding {
 		return this._status === FindingStatus.FalseFlag;
 	}
 
-	// Compute pattern hash for duplicate detection
-	// Uses file path + bucketed line range + normalized description keywords
+	/**
+	 * Generates a fuzzy hash for detecting duplicate findings.
+	 * Uses file path, bucketed line ranges (10-line granularity), and normalized keywords.
+	 * Two findings with the same hash are considered likely duplicates requiring referee review.
+	 */
 	static computePatternHash(
 		filePath: string,
 		lineStart: number,
@@ -86,7 +94,11 @@ export class Finding {
 		return createHash("sha256").update(normalized).digest("hex").slice(0, 16);
 	}
 
-	// Extract key terms from description for fuzzy matching
+	/**
+	 * Extracts meaningful keywords from a description for duplicate matching.
+	 * Removes stop words (articles, prepositions, etc.) and returns sorted unique terms.
+	 * Sorting ensures consistent hashing regardless of word order.
+	 */
 	private static extractKeyTerms(description: string): string {
 		const stopWords = new Set([
 			"a",
@@ -153,12 +165,19 @@ export class Finding {
 			.join(" ");
 	}
 
-	// Check if this finding overlaps with another (same file, overlapping lines)
+	/**
+	 * Checks if this finding's line range overlaps with another range.
+	 * Used in duplicate detection to find findings targeting the same code.
+	 */
 	overlapsWithLines(otherStart: number, otherEnd: number): boolean {
 		return this.lineStart <= otherEnd && this.lineEnd >= otherStart;
 	}
 
-	// Compute similarity score with another finding (0-1)
+	/**
+	 * Computes a similarity score (0-1) between this finding and another.
+	 * Combines line overlap (60%) and description keyword overlap (40%).
+	 * Returns 0 if findings are in different files.
+	 */
 	similarityScore(other: Finding): number {
 		// Must be same file
 		if (this.filePath !== other.filePath) return 0;
@@ -198,7 +217,12 @@ export class Finding {
 		return lineOverlap * 0.6 + descOverlap * 0.4;
 	}
 
-	// Validate as a legitimate finding
+	/**
+	 * Marks the finding as valid, awarding points to the submitting agent.
+	 * Called by the referee when the finding represents a real issue.
+	 * @returns Points awarded (positive)
+	 * @throws Error if finding is not in pending status
+	 */
 	validate(verdict: string, confidence: Confidence): number {
 		if (this._status !== FindingStatus.Pending) {
 			throw new Error(`Cannot validate finding with status: ${this._status}`);
@@ -211,7 +235,12 @@ export class Finding {
 		return this._pointsAwarded;
 	}
 
-	// Mark as false flag (from Pending)
+	/**
+	 * Marks the finding as a false positive, penalizing the submitting agent.
+	 * Called by the referee when the finding is not a real issue.
+	 * @returns Points awarded (negative)
+	 * @throws Error if finding is not in pending status
+	 */
 	markFalseFlag(verdict: string): number {
 		if (this._status !== FindingStatus.Pending) {
 			throw new Error(`Cannot mark false flag with status: ${this._status}`);
@@ -223,7 +252,13 @@ export class Finding {
 		return this._pointsAwarded;
 	}
 
-	// Revoke validation after successful dispute (Valid → FalseFlag)
+	/**
+	 * Revokes a previously valid finding after a successful dispute.
+	 * Changes status from Valid to FalseFlag and adjusts points.
+	 * Original submitter's stats are updated separately in Agent.revertValidToFalse().
+	 * @returns Points awarded (negative)
+	 * @throws Error if finding is not currently valid
+	 */
 	revokeValidation(verdict: string): number {
 		if (this._status !== FindingStatus.Valid) {
 			throw new Error(`Cannot revoke validation with status: ${this._status}`);
@@ -234,7 +269,12 @@ export class Finding {
 		return this._pointsAwarded;
 	}
 
-	// Mark as duplicate of another finding
+	/**
+	 * Marks the finding as a duplicate of an earlier finding.
+	 * Penalizes the submitter for not checking existing findings.
+	 * @returns Points awarded (negative, more severe than false flag)
+	 * @throws Error if finding is not in pending status
+	 */
 	markDuplicate(originalId: number, verdict: string): number {
 		if (this._status !== FindingStatus.Pending) {
 			throw new Error(`Cannot mark duplicate with status: ${this._status}`);
@@ -247,7 +287,10 @@ export class Finding {
 		return this._pointsAwarded;
 	}
 
-	// Factory method to create new finding
+	/**
+	 * Creates a new pending finding submitted by an agent.
+	 * Automatically computes the pattern hash for duplicate detection.
+	 */
 	static create(
 		id: number,
 		gameId: string,
@@ -286,7 +329,10 @@ export class Finding {
 		);
 	}
 
-	// Factory method from database row
+	/**
+	 * Reconstitutes a finding domain object from its database representation.
+	 * Maps snake_case columns to camelCase properties and parses dates.
+	 */
 	static fromRow(row: FindingRow): Finding {
 		return new Finding(
 			row.id,
@@ -309,7 +355,10 @@ export class Finding {
 		);
 	}
 
-	// Convert to database row format
+	/**
+	 * Serializes the finding to database row format for persistence.
+	 * Maps camelCase properties to snake_case columns and formats dates as ISO strings.
+	 */
 	toRow(): FindingRow {
 		return {
 			id: this.id,
