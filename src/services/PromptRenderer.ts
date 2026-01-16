@@ -3,7 +3,11 @@ import {
 	formatAcceptanceCriteria,
 } from "../domain/acceptance-criteria.js";
 import type { Finding } from "../domain/Finding.js";
-import type { HuntCategory, ScoreboardEntry } from "../domain/types.js";
+import type {
+	BugCategory,
+	HuntCategory,
+	ScoreboardEntry,
+} from "../domain/types.js";
 
 /** Variables needed to render a hunt phase prompt for an agent. */
 export interface HuntPromptVars {
@@ -65,6 +69,24 @@ export interface DisputeResolutionVars {
 	codeSnippet: string | null;
 	projectUrl: string;
 	scriptsPath: string;
+}
+
+/** Variables needed to render a verification prompt for uncertain findings. */
+export interface VerificationPromptVars {
+	gameId: string;
+	findingId: number;
+	agentId: string;
+	description: string;
+	filePath: string;
+	lineStart: number;
+	lineEnd: number;
+	codeSnippet: string | null;
+	projectUrl: string;
+	scriptsPath: string;
+	category: HuntCategory;
+	originalVerdict: string;
+	confidenceScore: number;
+	bugCategory: BugCategory | null;
 }
 
 /**
@@ -243,14 +265,34 @@ The claim cannot be "verified", only evaluated for logical soundness.
 - **FALSE** = Finding fails to meet criteria OR is an auto-reject case
 - **DUPLICATE** = Same issue already reported (provide duplicate_of_id)
 
-For VALID findings, assess confidence:
-- **high**: Issue is obvious from code, no assumptions needed
-- **medium**: Issue is sound but requires understanding context
-- **low**: Issue depends on runtime assumptions
+## Classification (REQUIRED for VALID findings)
+
+### Confidence Score (0-100):
+- **90-100**: Issue is obvious from code, no assumptions needed
+- **70-89**: Issue is sound but requires understanding context
+- **50-69**: Issue depends on runtime assumptions, should verify
+- **<50**: Too speculative, likely FALSE
+
+### Bug Category (choose one):
+- **incorrect_behavior**: Causes wrong output, crashes, data corruption, or security issues
+- **defensive_programming**: Suggests adding validation/guards that aren't strictly necessary (often FALSE)
+- **convention**: Style, naming, or best practice that doesn't affect correctness (usually FALSE)
+
+### Needs Verification:
+Set to true if:
+- Confidence < 70
+- Category is defensive_programming but you're unsure
+- Claim depends on assumptions you can't fully verify
 
 ## Command
 \`\`\`bash
-${vars.scriptsPath}/validate.sh ${vars.gameId} ${vars.findingId} <VALID|FALSE|DUPLICATE> "<explanation>" [high|medium|low] [duplicate_of_id]
+${vars.scriptsPath}/validate.sh ${vars.gameId} ${vars.findingId} <VALID|FALSE|DUPLICATE> "<explanation>" <confidence_score> <bug_category> <needs_verification> [duplicate_of_id]
+
+# Examples:
+# Clear bug: validate.sh game-123 45 VALID "Null pointer when X is empty" 95 incorrect_behavior false
+# Needs review: validate.sh game-123 46 VALID "Missing check could cause Y" 65 incorrect_behavior true
+# Defensive: validate.sh game-123 47 FALSE "This is defensive programming - internal API already validates at boundary" 85 defensive_programming false
+# Duplicate: validate.sh game-123 48 DUPLICATE "Same issue as #42" 100 incorrect_behavior false 42
 \`\`\`
 `;
 	}
@@ -402,6 +444,76 @@ ${vars.scriptsPath}/resolve.sh ${vars.gameId} ${vars.disputeId} <SUCCESSFUL|FAIL
 
 SUCCESSFUL = Disputer was right, finding is invalid
 FAILED = Finding was correct, dispute fails
+`;
+	}
+
+	/**
+	 * Generates a verification prompt for findings that need a second opinion.
+	 * Verifier independently analyzes whether the finding is a real bug.
+	 */
+	renderVerificationPrompt(vars: VerificationPromptVars): string {
+		return `# Finding Verification
+
+**You are an INDEPENDENT VERIFIER.** Your job is to determine if this finding represents a real bug.
+
+## Finding Details
+- **Finding ID:** ${vars.findingId}
+- **Original Submitter:** ${vars.agentId}
+- **File:** ${vars.filePath}
+- **Lines:** ${vars.lineStart}-${vars.lineEnd}
+- **Category:** ${vars.category}
+- **Initial Confidence:** ${vars.confidenceScore}/100
+- **Initial Classification:** ${vars.bugCategory ?? "unknown"}
+
+## Original Finding Description
+${vars.description}
+
+${vars.codeSnippet ? `## Code Snippet\n\`\`\`\n${vars.codeSnippet}\n\`\`\`` : ""}
+
+## Original Referee Assessment
+${vars.originalVerdict}
+
+## Your Task
+
+The initial referee was uncertain about this finding. You must independently verify:
+
+1. **Read the actual code** at ${vars.projectUrl}
+2. Navigate to ${vars.filePath}:${vars.lineStart}-${vars.lineEnd}
+3. Determine if the claimed issue is real
+
+## Classification Guidelines
+
+### Does it cause incorrect behavior? (CONFIRM)
+- Causes wrong output, data corruption, crashes
+- Security vulnerability with exploit path
+- Logic error that produces wrong results
+- Race condition with realistic trigger
+
+### Is it defensive programming? (REJECT)
+- Suggests adding validation that isn't strictly necessary
+- Internal function trusts its caller (and should)
+- Boundary validation already exists at public API
+- "Could fail if..." without showing how caller triggers it
+
+### Is it a convention issue? (REJECT)
+- Style preference, naming convention
+- "Better practice" without correctness impact
+- Unused variable, missing semicolon
+
+## Command
+\`\`\`bash
+${vars.scriptsPath}/verify.sh ${vars.gameId} ${vars.findingId} <CONFIRM|REJECT> "<explanation>" [corrected_category]
+
+# Examples:
+# Confirm as real bug:
+${vars.scriptsPath}/verify.sh ${vars.gameId} ${vars.findingId} CONFIRM "Verified: null pointer occurs when X is empty" incorrect_behavior
+
+# Reject as defensive programming:
+${vars.scriptsPath}/verify.sh ${vars.gameId} ${vars.findingId} REJECT "This is defensive programming - public API validates at line 42" defensive_programming
+
+# Reject as convention:
+${vars.scriptsPath}/verify.sh ${vars.gameId} ${vars.findingId} REJECT "This is a style preference, code works correctly" convention
+\`\`\`
 `;
 	}
 

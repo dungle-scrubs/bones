@@ -1,5 +1,6 @@
 import type { Game } from "../domain/Game.js";
 import {
+	type BugCategory,
 	type Confidence,
 	type ConflictDetectionResult,
 	type DisputeScoringResult,
@@ -13,6 +14,7 @@ import {
 	type ReviewPhaseResult,
 	type ScoringPhaseResult,
 	type SetupResult,
+	VerificationStatus,
 	type WinnerCheckResult,
 } from "../domain/types.js";
 import { AgentRepository } from "../repository/AgentRepository.js";
@@ -280,6 +282,7 @@ export class Orchestrator {
 	 * Records the referee's validation decision for a finding.
 	 * Automatically checks for duplicates when marking as VALID.
 	 * Updates agent scores and statistics accordingly.
+	 * If needsVerification is true, finding is flagged for second-pass review.
 	 */
 	validateFinding(
 		gameId: string,
@@ -288,7 +291,14 @@ export class Orchestrator {
 		explanation: string,
 		confidence?: Confidence,
 		duplicateOfId?: number,
-	): { verdict: "VALID" | "FALSE" | "DUPLICATE"; duplicateOfId?: number } {
+		confidenceScore?: number,
+		bugCategory?: BugCategory,
+		needsVerification?: boolean,
+	): {
+		verdict: "VALID" | "FALSE" | "DUPLICATE";
+		duplicateOfId?: number;
+		needsVerification?: boolean;
+	} {
 		const finding = this.findingRepo.findById(findingId);
 		if (!finding || finding.gameId !== gameId) {
 			throw new Error(`Finding not found: ${findingId}`);
@@ -302,6 +312,7 @@ export class Orchestrator {
 				verdict = "DUPLICATE";
 				duplicateOfId = duplicate.id;
 				explanation = `Duplicate of finding #${duplicate.id}: ${explanation}`;
+				needsVerification = false; // No need to verify duplicates
 			}
 		}
 
@@ -311,9 +322,100 @@ export class Orchestrator {
 			explanation,
 			confidence,
 			duplicateOfId,
+			confidenceScore,
+			bugCategory,
+			needsVerification,
 		);
 
-		return { verdict, duplicateOfId };
+		return { verdict, duplicateOfId, needsVerification };
+	}
+
+	/**
+	 * Lists findings that need verification before scoring can complete.
+	 * Returns prompts for spawning verification agents.
+	 */
+	getPendingVerifications(gameId: string): {
+		findings: Array<{
+			findingId: number;
+			prompt: string;
+		}>;
+	} {
+		const game = this.requireGame(gameId);
+		const pendingFindings = this.findingRepo.findPendingVerificationByRound(
+			gameId,
+			game.round,
+		);
+
+		const findings = pendingFindings.map((finding) => ({
+			findingId: finding.id,
+			prompt: this.promptRenderer.renderVerificationPrompt({
+				gameId,
+				findingId: finding.id,
+				agentId: finding.agentId,
+				description: finding.description,
+				filePath: finding.filePath,
+				lineStart: finding.lineStart,
+				lineEnd: finding.lineEnd,
+				codeSnippet: finding.codeSnippet,
+				projectUrl: game.config.projectUrl,
+				scriptsPath: this.scriptsPath,
+				category: game.category,
+				originalVerdict: finding.refereeVerdict ?? "",
+				confidenceScore: finding.confidenceScore ?? 0,
+				bugCategory: finding.bugCategory,
+			}),
+		}));
+
+		return { findings };
+	}
+
+	/**
+	 * Records the verification agent's decision on a finding.
+	 * If confirmed, awards points. If overridden, marks as false positive.
+	 */
+	verifyFinding(
+		gameId: string,
+		findingId: number,
+		confirmed: boolean,
+		explanation: string,
+		overriddenCategory?: BugCategory,
+	): { confirmed: boolean; points: number } {
+		const finding = this.findingRepo.findById(findingId);
+		if (!finding || finding.gameId !== gameId) {
+			throw new Error(`Finding not found: ${findingId}`);
+		}
+
+		if (finding.verificationStatus !== VerificationStatus.Pending) {
+			throw new Error(
+				`Finding ${findingId} is not pending verification: ${finding.verificationStatus}`,
+			);
+		}
+
+		const agent = this.agentRepo.findById(finding.agentId);
+		if (!agent) {
+			throw new Error(`Agent not found: ${finding.agentId}`);
+		}
+
+		const points = this.db.transaction(() => {
+			const pts = finding.applyVerification(
+				confirmed,
+				explanation,
+				overriddenCategory,
+			);
+			agent.awardPoints(pts);
+
+			if (confirmed) {
+				agent.recordValidFinding();
+			} else {
+				agent.recordFalseFinding();
+			}
+
+			this.findingRepo.update(finding);
+			this.agentRepo.update(agent);
+			return pts;
+		});
+
+		return { confirmed, points };
 	}
 
 	/**

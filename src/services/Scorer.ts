@@ -1,6 +1,6 @@
 import type { Dispute } from "../domain/Dispute.js";
 import type { Finding } from "../domain/Finding.js";
-import type { Confidence } from "../domain/types.js";
+import type { BugCategory, Confidence } from "../domain/types.js";
 import type { AgentRepository } from "../repository/AgentRepository.js";
 import type { Database } from "../repository/Database.js";
 import type { DisputeRepository } from "../repository/DisputeRepository.js";
@@ -21,6 +21,7 @@ export class Scorer {
 	/**
 	 * Applies a referee's finding validation to the submitting agent's score.
 	 * Updates finding status, agent score, and agent statistics atomically.
+	 * If needsVerification is true, defers scoring until verification completes.
 	 */
 	applyFindingValidation(
 		finding: Finding,
@@ -28,6 +29,9 @@ export class Scorer {
 		explanation: string,
 		confidence?: Confidence,
 		duplicateOfId?: number,
+		confidenceScore?: number,
+		bugCategory?: BugCategory,
+		needsVerification?: boolean,
 	): void {
 		const agent = this.agentRepo.findById(finding.agentId);
 		if (!agent) {
@@ -39,8 +43,17 @@ export class Scorer {
 
 			switch (verdict) {
 				case "VALID":
-					points = finding.validate(explanation, confidence ?? "medium");
-					agent.recordValidFinding();
+					points = finding.validate(
+						explanation,
+						confidence ?? "medium",
+						confidenceScore,
+						bugCategory,
+						needsVerification,
+					);
+					// Only record stats if not pending verification
+					if (!needsVerification) {
+						agent.recordValidFinding();
+					}
 					break;
 				case "FALSE":
 					points = finding.markFalseFlag(explanation);
@@ -55,7 +68,10 @@ export class Scorer {
 					break;
 			}
 
-			agent.awardPoints(points);
+			// Only award points if not pending verification
+			if (!needsVerification || verdict !== "VALID") {
+				agent.awardPoints(points);
+			}
 			this.findingRepo.update(finding);
 			this.agentRepo.update(agent);
 		});
