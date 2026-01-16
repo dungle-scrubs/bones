@@ -1,4 +1,11 @@
 #!/usr/bin/env node
+/**
+ * Code Hunt API Server
+ *
+ * Provides REST and SSE endpoints for the dashboard to query game state.
+ * Runs independently of the CLI, accessing the same SQLite database.
+ * Default port: 8019 (configurable via CODE_HUNT_PORT env var)
+ */
 
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -22,7 +29,7 @@ const app = new Hono();
 
 app.use("*", cors());
 
-// GET /api/games - Returns list of all games
+/** Lists all games with summary info (id, phase, winner, etc). */
 app.get("/api/games", (c) => {
 	const games = orchestrator.getAllGames();
 
@@ -43,7 +50,7 @@ app.get("/api/games", (c) => {
 	});
 });
 
-// GET /api/games/:id - Returns game state + scoreboard
+/** Returns detailed game state including scoreboard and statistics. */
 app.get("/api/games/:id", (c) => {
 	const gameId = c.req.param("id");
 
@@ -86,7 +93,7 @@ app.get("/api/games/:id", (c) => {
 	});
 });
 
-// GET /api/games/:id/findings - Returns all findings
+/** Returns all findings for a game with status and validation details. */
 app.get("/api/games/:id/findings", (c) => {
 	const gameId = c.req.param("id");
 
@@ -117,7 +124,7 @@ app.get("/api/games/:id/findings", (c) => {
 	});
 });
 
-// GET /api/games/:id/disputes - Returns all disputes
+/** Returns all disputes for a game with resolution status. */
 app.get("/api/games/:id/disputes", (c) => {
 	const gameId = c.req.param("id");
 
@@ -143,7 +150,10 @@ app.get("/api/games/:id/disputes", (c) => {
 	});
 });
 
-// SSE endpoint for real-time game updates
+/**
+ * Server-Sent Events endpoint for real-time game updates.
+ * Pushes game state every second. Dashboard uses this for live updates.
+ */
 app.get("/api/games/:id/events", async (c) => {
 	const gameId = c.req.param("id");
 
@@ -237,7 +247,7 @@ app.get("/api/games/:id/events", async (c) => {
 	);
 });
 
-// Health check
+/** Simple health check for monitoring/load balancers. */
 app.get("/health", (c) => c.json({ status: "ok" }));
 
 const port = parseInt(process.env.CODE_HUNT_PORT ?? "8019", 10);
@@ -250,7 +260,7 @@ console.log(`    GET /api/games/:id/findings - All findings`);
 console.log(`    GET /api/games/:id/disputes - All disputes`);
 console.log(`    GET /health                 - Health check`);
 
-// Graceful shutdown handlers
+/** Gracefully closes database connection on shutdown signals. */
 const shutdown = () => {
 	console.log("\nShutting down...");
 	orchestrator.close();

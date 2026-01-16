@@ -7,9 +7,17 @@ import type { Orchestrator, SetupConfig } from "../services/Orchestrator.js";
 
 const VALID_CATEGORIES = Object.values(HuntCategory);
 
+/**
+ * CLI command handlers that parse arguments and delegate to Orchestrator.
+ * Each method returns a JSON string for CLI output.
+ */
 export class Commands {
 	constructor(private orchestrator: Orchestrator) {}
 
+	/**
+	 * Creates a new game with agents. Parses config options from args.
+	 * With --web flag, starts API server and dashboard.
+	 */
 	async setup(args: string[]): Promise<string> {
 		const projectUrl = args[0];
 		if (!projectUrl) {
@@ -156,6 +164,7 @@ export class Commands {
 		return JSON.stringify(result, null, 2);
 	}
 
+	/** Starts the hunt phase, returning agent prompts to spawn. */
 	startHunt(args: string[]): string {
 		const gameId = args[0];
 		if (!gameId) {
@@ -166,6 +175,7 @@ export class Commands {
 		return JSON.stringify(result, null, 2);
 	}
 
+	/** Checks if hunt phase is ready for scoring. */
 	checkHunt(args: string[]): string {
 		const gameId = args[0];
 		if (!gameId) {
@@ -176,6 +186,7 @@ export class Commands {
 		return JSON.stringify(result, null, 2);
 	}
 
+	/** Transitions to hunt scoring, returning validation prompts. */
 	startHuntScoring(args: string[]): string {
 		const gameId = args[0];
 		if (!gameId) {
@@ -186,6 +197,7 @@ export class Commands {
 		return JSON.stringify(result, null, 2);
 	}
 
+	/** Records a referee's validation decision for a finding. */
 	validate(args: string[]): string {
 		const [
 			gameId,
@@ -271,6 +283,7 @@ export class Commands {
 		});
 	}
 
+	/** Transitions game to review phase where agents can dispute others' findings. */
 	startReview(args: string[]): string {
 		const gameId = args[0];
 		if (!gameId) {
@@ -281,6 +294,7 @@ export class Commands {
 		return JSON.stringify(result, null, 2);
 	}
 
+	/** Checks if review phase is ready for dispute resolution. */
 	checkReview(args: string[]): string {
 		const gameId = args[0];
 		if (!gameId) {
@@ -291,6 +305,7 @@ export class Commands {
 		return JSON.stringify(result, null, 2);
 	}
 
+	/** Transitions to review scoring, returning dispute resolution prompts. */
 	startReviewScoring(args: string[]): string {
 		const gameId = args[0];
 		if (!gameId) {
@@ -301,6 +316,7 @@ export class Commands {
 		return JSON.stringify(result, null, 2);
 	}
 
+	/** Records a referee's resolution decision for a dispute. */
 	resolve(args: string[]): string {
 		const [gameId, disputeIdStr, verdict, explanation] = args;
 
@@ -337,6 +353,7 @@ export class Commands {
 		});
 	}
 
+	/** Checks if any agent has reached the target score and returns game outcome. */
 	checkWinner(args: string[]): string {
 		const gameId = args[0];
 		if (!gameId) {
@@ -347,7 +364,7 @@ export class Commands {
 		return JSON.stringify(result, null, 2);
 	}
 
-	// Agent commands
+	/** Submits a new finding from an agent during the hunt phase. */
 	submit(args: string[]): string {
 		const [
 			gameId,
@@ -402,6 +419,7 @@ export class Commands {
 		return JSON.stringify({ success: true, findingId });
 	}
 
+	/** Submits a dispute from an agent challenging another agent's finding. */
 	dispute(args: string[]): string {
 		const [gameId, agentId, findingIdStr, reason] = args;
 
@@ -426,6 +444,7 @@ export class Commands {
 		return JSON.stringify({ success: true, disputeId });
 	}
 
+	/** Marks an agent as finished with the current phase (hunt or review). */
 	done(args: string[]): string {
 		const [gameId, agentId, phase] = args;
 
@@ -444,7 +463,7 @@ export class Commands {
 		return JSON.stringify({ success: true, agentId, phase });
 	}
 
-	// Query commands
+	/** Returns current game state including phase, round, timer, and scoreboard. */
 	status(args: string[]): string {
 		const gameId = args[0];
 		if (!gameId) {
@@ -475,6 +494,7 @@ export class Commands {
 		);
 	}
 
+	/** Lists all findings for a game with summary info (status, points, truncated description). */
 	findings(args: string[]): string {
 		const gameId = args[0];
 		if (!gameId) {
@@ -500,6 +520,7 @@ export class Commands {
 		);
 	}
 
+	/** Lists all disputes for a game with resolution status and points. */
 	disputes(args: string[]): string {
 		const gameId = args[0];
 		if (!gameId) {
@@ -522,6 +543,7 @@ export class Commands {
 		);
 	}
 
+	/** Exports game results to logs directory (markdown + JSON reports). */
 	export(args: string[]): string {
 		const gameId = args[0];
 		if (!gameId) {
@@ -532,6 +554,7 @@ export class Commands {
 		return JSON.stringify(result, null, 2);
 	}
 
+	/** Launches interactive terminal UI for real-time game monitoring. */
 	async ui(args: string[]): Promise<string> {
 		const gameId = args[0];
 		if (!gameId) {

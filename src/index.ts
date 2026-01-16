@@ -1,4 +1,9 @@
 #!/usr/bin/env node
+/**
+ * Code Hunt CLI entry point.
+ * Parses command-line arguments and routes to appropriate command handlers.
+ * Uses shared database at ~/.code-hunt/ for cross-session persistence.
+ */
 
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -81,7 +86,7 @@ Output:
 const orchestrator = new Orchestrator(dbPath, scriptsPath);
 const commands = new Commands(orchestrator);
 
-// Route command
+/** Maps CLI command names to their handler functions for routing. */
 const commandHandlers: Record<
 	string,
 	(args: string[]) => string | Promise<string>
