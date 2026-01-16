@@ -1,4 +1,4 @@
-// Creative human names for agents - diverse, memorable, short
+/** Pool of creative human names for agents - diverse, memorable, and short for easy identification. */
 const AGENT_NAMES = [
 	// Classic short names
 	"Ada",
