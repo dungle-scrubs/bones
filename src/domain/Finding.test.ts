@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Finding } from "./Finding.js";
-import { FindingStatus, SCORING } from "./types.js";
+import { FindingStatus, SCORING, VerificationStatus } from "./types.js";
 
 function createFinding(status: FindingStatus = FindingStatus.Pending): Finding {
 	return new Finding(
@@ -26,6 +26,10 @@ function createFinding(status: FindingStatus = FindingStatus.Pending): Finding {
 		0,
 		new Date(),
 		null,
+		null, // confidenceScore
+		null, // bugCategory
+		VerificationStatus.None,
+		null, // verifierExplanation
 	);
 }
 
@@ -174,6 +178,10 @@ describe("Finding", () => {
 				0,
 				new Date(),
 				null,
+				null,
+				null,
+				VerificationStatus.None,
+				null,
 			);
 			expect(finding1.similarityScore(finding2)).toBe(0);
 		});
@@ -197,6 +205,10 @@ describe("Finding", () => {
 				null,
 				0,
 				new Date(),
+				null,
+				null,
+				null,
+				VerificationStatus.None,
 				null,
 			);
 			const score = finding1.similarityScore(finding2);
@@ -222,6 +234,10 @@ describe("Finding", () => {
 				null,
 				0,
 				new Date(),
+				null,
+				null,
+				null,
+				VerificationStatus.None,
 				null,
 			);
 			const score = finding1.similarityScore(finding2);

@@ -1,9 +1,11 @@
 import { createHash } from "node:crypto";
 import {
+	type BugCategory,
 	type Confidence,
 	type FindingRow,
 	FindingStatus,
 	SCORING,
+	VerificationStatus,
 } from "./types.js";
 
 /**
@@ -30,6 +32,10 @@ export class Finding {
 		private _pointsAwarded: number,
 		public readonly createdAt: Date,
 		private _validatedAt: Date | null,
+		private _confidenceScore: number | null,
+		private _bugCategory: BugCategory | null,
+		private _verificationStatus: VerificationStatus,
+		private _verifierExplanation: string | null,
 	) {}
 
 	get status(): FindingStatus {
@@ -54,6 +60,26 @@ export class Finding {
 
 	get validatedAt(): Date | null {
 		return this._validatedAt;
+	}
+
+	get confidenceScore(): number | null {
+		return this._confidenceScore;
+	}
+
+	get bugCategory(): BugCategory | null {
+		return this._bugCategory;
+	}
+
+	get verificationStatus(): VerificationStatus {
+		return this._verificationStatus;
+	}
+
+	get verifierExplanation(): string | null {
+		return this._verifierExplanation;
+	}
+
+	get needsVerification(): boolean {
+		return this._verificationStatus === VerificationStatus.Pending;
 	}
 
 	get isPending(): boolean {
@@ -220,18 +246,74 @@ export class Finding {
 	/**
 	 * Marks the finding as valid, awarding points to the submitting agent.
 	 * Called by the referee when the finding represents a real issue.
-	 * @returns Points awarded (positive)
+	 * @param verdict - Referee's explanation of the validation
+	 * @param confidence - high/medium/low confidence level
+	 * @param confidenceScore - 0-100 numerical confidence
+	 * @param bugCategory - Classification of the bug type
+	 * @param needsVerification - Whether to spawn a verification agent
+	 * @returns Points awarded (positive, or 0 if pending verification)
 	 * @throws Error if finding is not in pending status
 	 */
-	validate(verdict: string, confidence: Confidence): number {
+	validate(
+		verdict: string,
+		confidence: Confidence,
+		confidenceScore?: number,
+		bugCategory?: BugCategory,
+		needsVerification?: boolean,
+	): number {
 		if (this._status !== FindingStatus.Pending) {
 			throw new Error(`Cannot validate finding with status: ${this._status}`);
 		}
 		this._status = FindingStatus.Valid;
 		this._refereeVerdict = verdict;
 		this._confidence = confidence;
-		this._pointsAwarded = SCORING.VALID_FINDING;
+		this._confidenceScore = confidenceScore ?? null;
+		this._bugCategory = bugCategory ?? null;
+
+		if (needsVerification) {
+			// Don't award points yet - wait for verification
+			this._verificationStatus = VerificationStatus.Pending;
+			this._pointsAwarded = 0;
+		} else {
+			this._verificationStatus = VerificationStatus.None;
+			this._pointsAwarded = SCORING.VALID_FINDING;
+		}
+
 		this._validatedAt = new Date();
+		return this._pointsAwarded;
+	}
+
+	/**
+	 * Records the verification result from a second-pass agent.
+	 * If confirmed, awards points. If overridden to false, applies penalty.
+	 * @returns Points to award (may be negative if overridden to false)
+	 */
+	applyVerification(
+		confirmed: boolean,
+		explanation: string,
+		overriddenCategory?: BugCategory,
+	): number {
+		if (this._verificationStatus !== VerificationStatus.Pending) {
+			throw new Error(
+				`Cannot verify finding with status: ${this._verificationStatus}`,
+			);
+		}
+
+		this._verifierExplanation = explanation;
+
+		if (confirmed) {
+			this._verificationStatus = VerificationStatus.Confirmed;
+			if (overriddenCategory) {
+				this._bugCategory = overriddenCategory;
+			}
+			this._pointsAwarded = SCORING.VALID_FINDING;
+			return this._pointsAwarded;
+		}
+
+		// Verification failed - this was actually a false positive
+		this._verificationStatus = VerificationStatus.Overridden;
+		this._status = FindingStatus.FalseFlag;
+		this._pointsAwarded = SCORING.FALSE_FLAG;
 		return this._pointsAwarded;
 	}
 
@@ -326,6 +408,10 @@ export class Finding {
 			0,
 			new Date(),
 			null,
+			null, // confidenceScore
+			null, // bugCategory
+			VerificationStatus.None,
+			null, // verifierExplanation
 		);
 	}
 
@@ -352,6 +438,11 @@ export class Finding {
 			row.points_awarded,
 			new Date(row.created_at),
 			row.validated_at ? new Date(row.validated_at) : null,
+			row.confidence_score,
+			row.bug_category as BugCategory | null,
+			(row.verification_status as VerificationStatus) ||
+				VerificationStatus.None,
+			row.verifier_explanation,
 		);
 	}
 
@@ -378,6 +469,10 @@ export class Finding {
 			points_awarded: this._pointsAwarded,
 			created_at: this.createdAt.toISOString(),
 			validated_at: this._validatedAt?.toISOString() ?? null,
+			confidence_score: this._confidenceScore,
+			bug_category: this._bugCategory,
+			verification_status: this._verificationStatus,
+			verifier_explanation: this._verifierExplanation,
 		};
 	}
 }

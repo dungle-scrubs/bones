@@ -652,6 +652,54 @@ export interface AgentRow {
 /** Referee's confidence level in a validation decision. */
 export type Confidence = "high" | "medium" | "low";
 
+/**
+ * Categorizes the nature of a finding for verification purposes.
+ * Determines whether a finding represents a real bug vs defensive suggestion.
+ */
+export enum BugCategory {
+	/** Causes incorrect output, crashes, data corruption, or security issues */
+	IncorrectBehavior = "incorrect_behavior",
+	/** Suggests adding validation/guards that aren't strictly necessary */
+	DefensiveProgramming = "defensive_programming",
+	/** Style, naming, or best practice that doesn't affect correctness */
+	ConventionIssue = "convention",
+}
+
+/**
+ * Status of the verification step after initial referee validation.
+ * Verification is an optional second pass for uncertain validations.
+ */
+export enum VerificationStatus {
+	/** No verification needed - referee was confident */
+	None = "none",
+	/** Awaiting verification by a second agent */
+	Pending = "pending",
+	/** Second agent confirmed the initial verdict */
+	Confirmed = "confirmed",
+	/** Second agent overrode the initial verdict */
+	Overridden = "overridden",
+}
+
+/**
+ * Structured output from referee validation including confidence and categorization.
+ * Used to determine if verification is needed before scoring.
+ */
+export interface ValidationResult {
+	verdict: "VALID" | "FALSE" | "DUPLICATE";
+	/** Confidence score 0-100 */
+	confidenceScore: number;
+	/** Classification of what kind of issue this is */
+	bugCategory: BugCategory | null;
+	/** True if a second verification pass should be spawned */
+	needsVerification: boolean;
+	/** Why verification is needed, if applicable */
+	verificationReason?: string;
+	/** Referee's explanation of the verdict */
+	explanation: string;
+	/** For duplicates, the ID of the original finding */
+	duplicateOfId?: number;
+}
+
 /** SQLite row format for findings table. */
 export interface FindingRow {
 	id: number;
@@ -671,6 +719,14 @@ export interface FindingRow {
 	points_awarded: number;
 	created_at: string;
 	validated_at: string | null;
+	/** 0-100 confidence score from referee */
+	confidence_score: number | null;
+	/** Classification: incorrect_behavior, defensive_programming, convention */
+	bug_category: string | null;
+	/** Verification status: none, pending, confirmed, overridden */
+	verification_status: string;
+	/** Explanation from verifier if verification was performed */
+	verifier_explanation: string | null;
 }
 
 /** SQLite row format for disputes table. */
