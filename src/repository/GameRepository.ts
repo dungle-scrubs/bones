@@ -3,6 +3,10 @@ import { Game } from "../domain/Game.js";
 import { type GameConfig, type GameRow, Phase } from "../domain/types.js";
 import type { Database } from "./Database.js";
 
+/**
+ * Extracts a readable project name from a URL or path for use in game IDs.
+ * Handles GitHub URLs, local paths, and falls back to "project".
+ */
 function extractProjectName(projectUrl: string): string {
 	// Handle GitHub URLs: https://github.com/owner/repo or git@github.com:owner/repo
 	const githubMatch = projectUrl.match(
@@ -22,15 +26,27 @@ function extractProjectName(projectUrl: string): string {
 	return "project";
 }
 
+/**
+ * Generates a human-readable game ID combining project name and random suffix.
+ * Format: {project-name}-{6-char-hex} (e.g., "my-repo-a1b2c3")
+ */
 function generateGameId(projectUrl: string): string {
 	const projectName = extractProjectName(projectUrl);
 	const shortId = randomBytes(3).toString("hex"); // 6 chars
 	return `${projectName}-${shortId}`;
 }
 
+/**
+ * Handles persistence of Game entities to SQLite.
+ * Provides CRUD operations and queries for game state.
+ */
 export class GameRepository {
 	constructor(private db: Database) {}
 
+	/**
+	 * Creates a new game in the database with Setup phase.
+	 * Generates a unique game ID from the project URL.
+	 */
 	create(config: GameConfig): Game {
 		const id = generateGameId(config.projectUrl);
 		const now = new Date().toISOString();
@@ -67,6 +83,7 @@ export class GameRepository {
 		);
 	}
 
+	/** Retrieves a game by its unique ID. Returns null if not found. */
 	findById(id: string): Game | null {
 		const stmt = this.db.connection.prepare(`
       SELECT * FROM games WHERE id = ?
@@ -75,6 +92,10 @@ export class GameRepository {
 		return row ? Game.fromRow(row) : null;
 	}
 
+	/**
+	 * Finds an incomplete game for a project URL.
+	 * Used to prevent creating duplicate games for the same project.
+	 */
 	findActiveByProject(projectUrl: string): Game | null {
 		const stmt = this.db.connection.prepare(`
       SELECT * FROM games
@@ -86,6 +107,7 @@ export class GameRepository {
 		return row ? Game.fromRow(row) : null;
 	}
 
+	/** Returns the most recently created game, regardless of status. */
 	findMostRecent(): Game | null {
 		const stmt = this.db.connection.prepare(`
       SELECT * FROM games
@@ -96,6 +118,7 @@ export class GameRepository {
 		return row ? Game.fromRow(row) : null;
 	}
 
+	/** Lists games ordered by creation date, most recent first. */
 	findAll(limit: number = 50): Game[] {
 		const stmt = this.db.connection.prepare(`
       SELECT * FROM games
@@ -106,6 +129,10 @@ export class GameRepository {
 		return rows.map((row) => Game.fromRow(row));
 	}
 
+	/**
+	 * Persists changes to game state (phase, round, winner, etc.).
+	 * Does not update immutable config fields.
+	 */
 	update(game: Game): void {
 		const row = game.toRow();
 		const stmt = this.db.connection.prepare(`
@@ -128,6 +155,10 @@ export class GameRepository {
 		);
 	}
 
+	/**
+	 * Deletes a game and all related data (agents, findings, disputes).
+	 * Uses CASCADE delete defined in schema foreign keys.
+	 */
 	delete(id: string): void {
 		const stmt = this.db.connection.prepare(`
       DELETE FROM games WHERE id = ?

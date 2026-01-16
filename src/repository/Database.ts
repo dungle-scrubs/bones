@@ -2,6 +2,10 @@ import { existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import BetterSqlite3, { type Database as SqliteDatabase } from "better-sqlite3";
 
+/**
+ * SQLite schema for Code Hunt game state.
+ * Defines tables for games, agents, findings, and disputes with foreign key relationships.
+ */
 const SCHEMA = `
 -- Games table
 CREATE TABLE IF NOT EXISTS games (
@@ -94,6 +98,11 @@ CREATE INDEX IF NOT EXISTS idx_disputes_finding ON disputes(finding_id);
 CREATE INDEX IF NOT EXISTS idx_disputes_status ON disputes(status);
 `;
 
+/**
+ * Manages SQLite database connection and schema migrations.
+ * Provides transaction support and ensures data directory exists.
+ * Uses WAL mode for better concurrent read performance.
+ */
 export class Database {
 	private db: SqliteDatabase;
 
@@ -110,6 +119,10 @@ export class Database {
 		this.migrate();
 	}
 
+	/**
+	 * Runs schema migrations to create/update tables.
+	 * Idempotent - safe to run on existing databases.
+	 */
 	private migrate(): void {
 		this.db.exec(SCHEMA);
 		// Add max_rounds column if missing (migration for existing DBs)
@@ -143,15 +156,20 @@ export class Database {
 		}
 	}
 
+	/** Exposes the raw SQLite connection for repository layer queries. */
 	get connection(): SqliteDatabase {
 		return this.db;
 	}
 
+	/** Closes the database connection. Call when shutting down. */
 	close(): void {
 		this.db.close();
 	}
 
-	// Transaction helper
+	/**
+	 * Wraps a function in a database transaction.
+	 * Commits on success, rolls back on error.
+	 */
 	transaction<T>(fn: () => T): T {
 		return this.db.transaction(fn)();
 	}

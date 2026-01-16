@@ -2,6 +2,7 @@ import { Finding } from "../domain/Finding.js";
 import type { FindingRow } from "../domain/types.js";
 import type { Database } from "./Database.js";
 
+/** Input data for creating a new finding submission. */
 export interface CreateFindingInput {
 	gameId: string;
 	roundNumber: number;
@@ -13,9 +14,17 @@ export interface CreateFindingInput {
 	codeSnippet?: string;
 }
 
+/**
+ * Handles persistence of Finding entities to SQLite.
+ * Provides duplicate detection, filtering by status, and agent attribution queries.
+ */
 export class FindingRepository {
 	constructor(private db: Database) {}
 
+	/**
+	 * Creates a new finding and increments the agent's findingsSubmitted counter.
+	 * Computes pattern hash for duplicate detection automatically.
+	 */
 	create(input: CreateFindingInput): Finding {
 		const patternHash = Finding.computePatternHash(
 			input.filePath,
@@ -67,6 +76,7 @@ export class FindingRepository {
 		);
 	}
 
+	/** Retrieves a finding by its auto-incremented ID. */
 	findById(id: number): Finding | null {
 		const stmt = this.db.connection.prepare(`
       SELECT * FROM findings WHERE id = ?
@@ -75,6 +85,7 @@ export class FindingRepository {
 		return row ? Finding.fromRow(row) : null;
 	}
 
+	/** Lists all findings for a game, most recent first. */
 	findByGameId(gameId: string): Finding[] {
 		const stmt = this.db.connection.prepare(`
       SELECT * FROM findings WHERE game_id = ?
@@ -84,6 +95,7 @@ export class FindingRepository {
 		return rows.map(Finding.fromRow);
 	}
 
+	/** Lists all findings submitted by a specific agent. */
 	findByAgentId(agentId: string): Finding[] {
 		const stmt = this.db.connection.prepare(`
       SELECT * FROM findings WHERE agent_id = ?
@@ -93,6 +105,7 @@ export class FindingRepository {
 		return rows.map(Finding.fromRow);
 	}
 
+	/** Lists all pending findings awaiting referee validation. */
 	findPendingByGameId(gameId: string): Finding[] {
 		const stmt = this.db.connection.prepare(`
       SELECT * FROM findings
@@ -103,6 +116,7 @@ export class FindingRepository {
 		return rows.map(Finding.fromRow);
 	}
 
+	/** Lists pending findings for a specific round, oldest first. */
 	findPendingByRound(gameId: string, round: number): Finding[] {
 		const stmt = this.db.connection.prepare(`
       SELECT * FROM findings
@@ -113,6 +127,7 @@ export class FindingRepository {
 		return rows.map(Finding.fromRow);
 	}
 
+	/** Lists all validated findings for a game. */
 	findValidByGameId(gameId: string): Finding[] {
 		const stmt = this.db.connection.prepare(`
       SELECT * FROM findings
@@ -123,6 +138,10 @@ export class FindingRepository {
 		return rows.map(Finding.fromRow);
 	}
 
+	/**
+	 * Finds a finding with matching pattern hash for duplicate detection.
+	 * @param validOnly When true, only matches validated findings. When false, includes pending.
+	 */
 	findByPatternHash(
 		gameId: string,
 		patternHash: string,
@@ -143,8 +162,10 @@ export class FindingRepository {
 		return row ? Finding.fromRow(row) : null;
 	}
 
-	// Find potential duplicates using overlap detection
-	// Returns findings in same file with overlapping line ranges
+	/**
+	 * Finds findings with overlapping line ranges in the same file.
+	 * Used as candidates for detailed similarity scoring.
+	 */
 	findPotentialDuplicates(
 		gameId: string,
 		filePath: string,
@@ -164,7 +185,10 @@ export class FindingRepository {
 		return rows.map(Finding.fromRow);
 	}
 
-	// Find best duplicate match using similarity scoring
+	/**
+	 * Finds the most similar existing finding above a threshold.
+	 * Returns the best match for duplicate marking, or null if no match.
+	 */
 	findBestDuplicateMatch(
 		gameId: string,
 		newFinding: Finding,
@@ -192,7 +216,10 @@ export class FindingRepository {
 		return bestMatch;
 	}
 
-	// Find findings eligible for review (valid findings not submitted by agent)
+	/**
+	 * Lists valid findings that an agent can dispute (excludes their own).
+	 * Used to generate review prompts for the dispute phase.
+	 */
 	findReviewableForAgent(gameId: string, agentId: string): Finding[] {
 		const stmt = this.db.connection.prepare(`
       SELECT * FROM findings
@@ -203,6 +230,10 @@ export class FindingRepository {
 		return rows.map(Finding.fromRow);
 	}
 
+	/**
+	 * Persists changes to finding state (status, verdict, points, etc.).
+	 * Called after referee validation decisions.
+	 */
 	update(finding: Finding): void {
 		const row = finding.toRow();
 		const stmt = this.db.connection.prepare(`
@@ -227,6 +258,7 @@ export class FindingRepository {
 		);
 	}
 
+	/** Returns total number of findings submitted in a game. */
 	countByGameId(gameId: string): number {
 		const stmt = this.db.connection.prepare(`
       SELECT COUNT(*) as count FROM findings WHERE game_id = ?
@@ -235,6 +267,7 @@ export class FindingRepository {
 		return result.count;
 	}
 
+	/** Returns number of findings awaiting validation. */
 	countPendingByGameId(gameId: string): number {
 		const stmt = this.db.connection.prepare(`
       SELECT COUNT(*) as count FROM findings
@@ -244,6 +277,7 @@ export class FindingRepository {
 		return result.count;
 	}
 
+	/** Returns number of findings submitted in a specific round. */
 	countByRound(gameId: string, round: number): number {
 		const stmt = this.db.connection.prepare(`
       SELECT COUNT(*) as count FROM findings

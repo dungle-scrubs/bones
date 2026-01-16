@@ -7,9 +7,14 @@ import type {
 import { generateAgentNames } from "../utils/names.js";
 import type { Database } from "./Database.js";
 
+/**
+ * Handles persistence of Agent entities to SQLite.
+ * Provides scoreboard generation and phase completion tracking.
+ */
 export class AgentRepository {
 	constructor(private db: Database) {}
 
+	/** Creates a single agent with the specified ID. */
 	create(id: string, gameId: string): Agent {
 		const now = new Date().toISOString();
 
@@ -23,6 +28,10 @@ export class AgentRepository {
 		return Agent.create(id, gameId);
 	}
 
+	/**
+	 * Creates multiple agents with generated human-readable names.
+	 * IDs are prefixed with gameId to prevent collisions across games.
+	 */
 	createMany(gameId: string, count: number): Agent[] {
 		const agents: Agent[] = [];
 		const stmt = this.db.connection.prepare(`
@@ -43,6 +52,7 @@ export class AgentRepository {
 		return agents;
 	}
 
+	/** Retrieves an agent by their full ID (gameId-name). */
 	findById(id: string): Agent | null {
 		const stmt = this.db.connection.prepare(`
       SELECT * FROM agents WHERE id = ?
@@ -51,6 +61,7 @@ export class AgentRepository {
 		return row ? Agent.fromRow(row) : null;
 	}
 
+	/** Lists all agents participating in a game. */
 	findByGameId(gameId: string): Agent[] {
 		const stmt = this.db.connection.prepare(`
       SELECT * FROM agents WHERE game_id = ?
@@ -59,6 +70,7 @@ export class AgentRepository {
 		return rows.map(Agent.fromRow);
 	}
 
+	/** Lists agents still competing (not eliminated or won). */
 	findActiveByGameId(gameId: string): Agent[] {
 		const stmt = this.db.connection.prepare(`
       SELECT * FROM agents WHERE game_id = ? AND status = 'active'
@@ -67,6 +79,10 @@ export class AgentRepository {
 		return rows.map(Agent.fromRow);
 	}
 
+	/**
+	 * Persists all agent state changes (score, stats, phase completion).
+	 * Called after scoring or phase transitions.
+	 */
 	update(agent: Agent): void {
 		const row = agent.toRow();
 		const stmt = this.db.connection.prepare(`
@@ -101,6 +117,10 @@ export class AgentRepository {
 		);
 	}
 
+	/**
+	 * Returns agents formatted for scoreboard display.
+	 * Ordered by score descending, then by valid findings as tiebreaker.
+	 */
 	getScoreboard(gameId: string): ScoreboardEntry[] {
 		const stmt = this.db.connection.prepare(`
       SELECT * FROM agents
@@ -122,6 +142,10 @@ export class AgentRepository {
 		}));
 	}
 
+	/**
+	 * Returns agents who haven't marked themselves done for the current hunt.
+	 * Used to check if hunt phase can proceed to scoring.
+	 */
 	getPendingHuntAgents(gameId: string, round: number): Agent[] {
 		const stmt = this.db.connection.prepare(`
       SELECT * FROM agents
@@ -131,6 +155,10 @@ export class AgentRepository {
 		return rows.map(Agent.fromRow);
 	}
 
+	/**
+	 * Returns agents who haven't marked themselves done for the current review.
+	 * Used to check if review phase can proceed to scoring.
+	 */
 	getPendingReviewAgents(gameId: string, round: number): Agent[] {
 		const stmt = this.db.connection.prepare(`
       SELECT * FROM agents

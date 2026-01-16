@@ -2,6 +2,7 @@ import { Dispute } from "../domain/Dispute.js";
 import type { DisputeRow } from "../domain/types.js";
 import type { Database } from "./Database.js";
 
+/** Input data for creating a new dispute against a finding. */
 export interface CreateDisputeInput {
 	gameId: string;
 	roundNumber: number;
@@ -10,9 +11,17 @@ export interface CreateDisputeInput {
 	reason: string;
 }
 
+/**
+ * Handles persistence of Dispute entities to SQLite.
+ * Provides queries for pending disputes and duplicate prevention.
+ */
 export class DisputeRepository {
 	constructor(private db: Database) {}
 
+	/**
+	 * Creates a new pending dispute against a finding.
+	 * Does not validate business rules - caller must check eligibility.
+	 */
 	create(input: CreateDisputeInput): Dispute {
 		const now = new Date().toISOString();
 
@@ -41,6 +50,7 @@ export class DisputeRepository {
 		);
 	}
 
+	/** Retrieves a dispute by its auto-incremented ID. */
 	findById(id: number): Dispute | null {
 		const stmt = this.db.connection.prepare(`
       SELECT * FROM disputes WHERE id = ?
@@ -49,6 +59,7 @@ export class DisputeRepository {
 		return row ? Dispute.fromRow(row) : null;
 	}
 
+	/** Lists all disputes for a game, most recent first. */
 	findByGameId(gameId: string): Dispute[] {
 		const stmt = this.db.connection.prepare(`
       SELECT * FROM disputes WHERE game_id = ?
@@ -58,6 +69,7 @@ export class DisputeRepository {
 		return rows.map(Dispute.fromRow);
 	}
 
+	/** Lists all disputes against a specific finding. */
 	findByFindingId(findingId: number): Dispute[] {
 		const stmt = this.db.connection.prepare(`
       SELECT * FROM disputes WHERE finding_id = ?
@@ -67,6 +79,7 @@ export class DisputeRepository {
 		return rows.map(Dispute.fromRow);
 	}
 
+	/** Lists disputes awaiting referee resolution. */
 	findPendingByGameId(gameId: string): Dispute[] {
 		const stmt = this.db.connection.prepare(`
       SELECT * FROM disputes
@@ -77,6 +90,7 @@ export class DisputeRepository {
 		return rows.map(Dispute.fromRow);
 	}
 
+	/** Lists pending disputes for a specific round, oldest first. */
 	findPendingByRound(gameId: string, round: number): Dispute[] {
 		const stmt = this.db.connection.prepare(`
       SELECT * FROM disputes
@@ -87,7 +101,10 @@ export class DisputeRepository {
 		return rows.map(Dispute.fromRow);
 	}
 
-	// Check if agent already disputed a finding
+	/**
+	 * Checks if an agent has already disputed a finding.
+	 * Prevents duplicate disputes from the same agent.
+	 */
 	hasAgentDisputed(findingId: number, disputerId: string): boolean {
 		const stmt = this.db.connection.prepare(`
       SELECT 1 FROM disputes
@@ -98,6 +115,10 @@ export class DisputeRepository {
 		return result !== undefined;
 	}
 
+	/**
+	 * Persists changes to dispute state (status, verdict, points).
+	 * Called after referee resolution decisions.
+	 */
 	update(dispute: Dispute): void {
 		const row = dispute.toRow();
 		const stmt = this.db.connection.prepare(`
@@ -118,6 +139,7 @@ export class DisputeRepository {
 		);
 	}
 
+	/** Returns number of disputes awaiting resolution. */
 	countPendingByGameId(gameId: string): number {
 		const stmt = this.db.connection.prepare(`
       SELECT COUNT(*) as count FROM disputes
