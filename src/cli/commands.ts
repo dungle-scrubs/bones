@@ -1,4 +1,4 @@
-import { HuntCategory } from "../domain/types.js";
+import { BugCategory, HuntCategory } from "../domain/types.js";
 import {
 	ensureDashboardRunning,
 	getDashboardUrl,
@@ -114,9 +114,9 @@ export class Commands {
 				case "--max-rounds":
 				case "-m": {
 					const parsed = parseInt(value, 10);
-					if (Number.isNaN(parsed)) {
+					if (Number.isNaN(parsed) || parsed < 0) {
 						return JSON.stringify({
-							error: `Invalid number for --max-rounds: ${value}`,
+							error: `--max-rounds must be a non-negative integer (0 = unlimited), got: ${value}`,
 						});
 					}
 					config.maxRounds = parsed; // 0 = no limit
@@ -197,21 +197,19 @@ export class Commands {
 		return JSON.stringify(result, null, 2);
 	}
 
-	/** Records a referee's validation decision for a finding. */
+	/**
+	 * Records a referee's validation decision for a finding.
+	 * New format: validate <game_id> <finding_id> <verdict> <explanation> <confidence_score> <bug_category> <needs_verification> [duplicate_of_id]
+	 * Legacy format: validate <game_id> <finding_id> <verdict> <explanation> [confidence] [duplicate_of_id]
+	 */
 	validate(args: string[]): string {
-		const [
-			gameId,
-			findingIdStr,
-			verdict,
-			explanation,
-			confidenceOrDuplicate,
-			duplicateOfStr,
-		] = args;
+		const [gameId, findingIdStr, verdict, explanation, arg5, arg6, arg7, arg8] =
+			args;
 
 		if (!gameId || !findingIdStr || !verdict || !explanation) {
 			return JSON.stringify({
 				error:
-					"Usage: validate <game_id> <finding_id> <VALID|FALSE|DUPLICATE> <explanation> [confidence:high|medium|low] [duplicate_of_id]",
+					"Usage: validate <game_id> <finding_id> <VALID|FALSE|DUPLICATE> <explanation> <confidence_score:0-100> <bug_category:incorrect_behavior|defensive_programming|convention> <needs_verification:true|false> [duplicate_of_id]",
 			});
 		}
 
@@ -227,33 +225,82 @@ export class Commands {
 			});
 		}
 
-		// Parse confidence and duplicateOfId - confidence can be "high", "medium", or "low"
+		// Determine if new or legacy format based on arg5
+		const isNewFormat =
+			arg5 !== undefined &&
+			!Number.isNaN(parseInt(arg5, 10)) &&
+			parseInt(arg5, 10) >= 0 &&
+			parseInt(arg5, 10) <= 100;
+
 		let confidence: "high" | "medium" | "low" | undefined;
+		let confidenceScore: number | undefined;
+		let bugCategory: BugCategory | undefined;
+		let needsVerification = false;
 		let duplicateOfId: number | undefined;
 
-		if (confidenceOrDuplicate) {
-			if (
-				["high", "medium", "low"].includes(confidenceOrDuplicate.toLowerCase())
-			) {
-				confidence = confidenceOrDuplicate.toLowerCase() as
-					| "high"
-					| "medium"
-					| "low";
-				if (duplicateOfStr) {
-					duplicateOfId = parseInt(duplicateOfStr, 10);
-					if (Number.isNaN(duplicateOfId)) {
-						return JSON.stringify({
-							error: `Invalid duplicate_of_id: ${duplicateOfStr}`,
-						});
-					}
-				}
+		if (isNewFormat) {
+			// New format: confidence_score, bug_category, needs_verification, [duplicate_of_id]
+			confidenceScore = parseInt(arg5, 10);
+
+			// Map score to legacy confidence level
+			if (confidenceScore >= 90) {
+				confidence = "high";
+			} else if (confidenceScore >= 70) {
+				confidence = "medium";
 			} else {
-				// It's a duplicate_of_id
-				duplicateOfId = parseInt(confidenceOrDuplicate, 10);
+				confidence = "low";
+			}
+
+			// Parse bug_category
+			if (arg6) {
+				const validCategories = Object.values(BugCategory) as string[];
+				if (!validCategories.includes(arg6)) {
+					return JSON.stringify({
+						error: `Invalid bug_category: ${arg6}. Valid values: ${validCategories.join(", ")}`,
+					});
+				}
+				bugCategory = arg6 as BugCategory;
+			}
+
+			// Parse needs_verification
+			if (arg7) {
+				if (arg7 !== "true" && arg7 !== "false") {
+					return JSON.stringify({
+						error: `Invalid needs_verification: ${arg7}. Must be true or false`,
+					});
+				}
+				needsVerification = arg7 === "true";
+			}
+
+			// Parse duplicate_of_id (optional)
+			if (arg8) {
+				duplicateOfId = parseInt(arg8, 10);
 				if (Number.isNaN(duplicateOfId)) {
 					return JSON.stringify({
-						error: `Invalid value: "${confidenceOrDuplicate}". Expected confidence (high|medium|low) or duplicate_of_id (integer)`,
+						error: `Invalid duplicate_of_id: ${arg8}`,
 					});
+				}
+			}
+		} else {
+			// Legacy format: [confidence:high|medium|low] [duplicate_of_id]
+			if (arg5) {
+				if (["high", "medium", "low"].includes(arg5.toLowerCase())) {
+					confidence = arg5.toLowerCase() as "high" | "medium" | "low";
+					if (arg6) {
+						duplicateOfId = parseInt(arg6, 10);
+						if (Number.isNaN(duplicateOfId)) {
+							return JSON.stringify({
+								error: `Invalid duplicate_of_id: ${arg6}`,
+							});
+						}
+					}
+				} else {
+					duplicateOfId = parseInt(arg5, 10);
+					if (Number.isNaN(duplicateOfId)) {
+						return JSON.stringify({
+							error: `Invalid value: "${arg5}". Expected confidence (high|medium|low) or duplicate_of_id (integer)`,
+						});
+					}
 				}
 			}
 		}
@@ -272,6 +319,9 @@ export class Commands {
 			explanation,
 			confidence,
 			duplicateOfId,
+			confidenceScore,
+			bugCategory,
+			needsVerification,
 		);
 
 		return JSON.stringify({
@@ -280,6 +330,80 @@ export class Commands {
 			verdict: result.verdict,
 			duplicateOfId: result.duplicateOfId,
 			confidence,
+			confidenceScore,
+			bugCategory,
+			needsVerification: result.needsVerification,
+		});
+	}
+
+	/**
+	 * Returns findings that need verification before scoring completes.
+	 * Used to spawn verification agents for uncertain findings.
+	 */
+	getPendingVerifications(args: string[]): string {
+		const gameId = args[0];
+		if (!gameId) {
+			return JSON.stringify({
+				error: "Usage: pending-verifications <game_id>",
+			});
+		}
+
+		const result = this.orchestrator.getPendingVerifications(gameId);
+		return JSON.stringify(result, null, 2);
+	}
+
+	/**
+	 * Records a verification agent's decision on an uncertain finding.
+	 * CONFIRM = it's a real bug, REJECT = it's not
+	 */
+	verify(args: string[]): string {
+		const [gameId, findingIdStr, verdict, explanation, categoryOverride] = args;
+
+		if (!gameId || !findingIdStr || !verdict || !explanation) {
+			return JSON.stringify({
+				error:
+					"Usage: verify <game_id> <finding_id> <CONFIRM|REJECT> <explanation> [corrected_category]",
+			});
+		}
+
+		const findingId = parseInt(findingIdStr, 10);
+		if (Number.isNaN(findingId)) {
+			return JSON.stringify({ error: "finding_id must be a valid integer" });
+		}
+
+		const normalizedVerdict = verdict.toUpperCase();
+		if (!["CONFIRM", "REJECT"].includes(normalizedVerdict)) {
+			return JSON.stringify({
+				error: "verdict must be CONFIRM or REJECT",
+			});
+		}
+
+		// Parse optional category override
+		let bugCategory: BugCategory | undefined;
+		if (categoryOverride) {
+			const validCategories = Object.values(BugCategory) as string[];
+			if (!validCategories.includes(categoryOverride)) {
+				return JSON.stringify({
+					error: `Invalid category: ${categoryOverride}. Valid values: ${validCategories.join(", ")}`,
+				});
+			}
+			bugCategory = categoryOverride as BugCategory;
+		}
+
+		const result = this.orchestrator.verifyFinding(
+			gameId,
+			findingId,
+			normalizedVerdict === "CONFIRM",
+			explanation,
+			bugCategory,
+		);
+
+		return JSON.stringify({
+			success: true,
+			findingId,
+			confirmed: result.confirmed,
+			points: result.points,
+			category: bugCategory,
 		});
 	}
 

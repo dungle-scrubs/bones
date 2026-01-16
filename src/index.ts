@@ -42,7 +42,9 @@ Game Flow Commands:
   start-hunt <game_id>      Start hunt phase
   check-hunt <game_id>      Check hunt phase status
   start-hunt-scoring <id>   Start scoring hunt findings
-  validate <game_id> <finding_id> <VALID|FALSE|DUPLICATE> <explanation> [confidence] [dup_id]
+  validate <game_id> <finding_id> <VALID|FALSE|DUPLICATE> <explanation> <confidence_score> <bug_category> <needs_verification> [dup_id]
+  pending-verifications <id>  List findings needing verification
+  verify <game_id> <finding_id> <CONFIRM|REJECT> <explanation> [corrected_category]
 
   start-review <game_id>    Start review phase
   check-review <game_id>    Check review phase status
@@ -96,6 +98,8 @@ const commandHandlers: Record<
 	"check-hunt": (a) => commands.checkHunt(a),
 	"start-hunt-scoring": (a) => commands.startHuntScoring(a),
 	validate: (a) => commands.validate(a),
+	"pending-verifications": (a) => commands.getPendingVerifications(a),
+	verify: (a) => commands.verify(a),
 	"start-review": (a) => commands.startReview(a),
 	"check-review": (a) => commands.checkReview(a),
 	"start-review-scoring": (a) => commands.startReviewScoring(a),
