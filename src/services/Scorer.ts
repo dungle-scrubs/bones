@@ -6,6 +6,10 @@ import type { Database } from "../repository/Database.js";
 import type { DisputeRepository } from "../repository/DisputeRepository.js";
 import type { FindingRepository } from "../repository/FindingRepository.js";
 
+/**
+ * Handles score calculations and state updates when findings/disputes are validated.
+ * All scoring operations are transactional to ensure consistency.
+ */
 export class Scorer {
 	constructor(
 		private db: Database,
@@ -14,7 +18,10 @@ export class Scorer {
 		private disputeRepo: DisputeRepository,
 	) {}
 
-	// Apply finding validation result to agent score
+	/**
+	 * Applies a referee's finding validation to the submitting agent's score.
+	 * Updates finding status, agent score, and agent statistics atomically.
+	 */
 	applyFindingValidation(
 		finding: Finding,
 		verdict: "VALID" | "FALSE" | "DUPLICATE",
@@ -54,7 +61,11 @@ export class Scorer {
 		});
 	}
 
-	// Apply dispute resolution to both disputer and original finder
+	/**
+	 * Applies a referee's dispute resolution, affecting both parties.
+	 * On success: disputer gains points, finder loses points and finding is revoked.
+	 * On failure: disputer loses points, finder keeps their valid finding.
+	 */
 	applyDisputeResolution(
 		dispute: Dispute,
 		finding: Finding,
@@ -99,8 +110,11 @@ export class Scorer {
 		});
 	}
 
-	// Check for duplicates before validating
-	// When validOnly is true, only check against already-validated findings
+	/**
+	 * Checks if a finding is a duplicate of an existing one by pattern hash.
+	 * @param validOnly When true, only matches against validated findings.
+	 *                  When false, also matches pending findings.
+	 */
 	checkForDuplicate(
 		finding: Finding,
 		gameId: string,

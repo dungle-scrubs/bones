@@ -24,6 +24,7 @@ import { Exporter } from "./Exporter.js";
 import { PromptRenderer } from "./PromptRenderer.js";
 import { Scorer } from "./Scorer.js";
 
+/** Input configuration for creating a new game session. */
 export interface SetupConfig {
 	projectUrl: string;
 	category?: HuntCategory;
@@ -32,20 +33,29 @@ export interface SetupConfig {
 	huntDuration?: number;
 	reviewDuration?: number;
 	numAgents?: number;
-	maxRounds?: number; // 0 = no limit, default 3
+	/** Maximum rounds before tiebreaker. 0 = no limit, default 3. */
+	maxRounds?: number;
 }
 
+/** Response when user prompt conflicts with category exclusions. */
 export interface ClarificationNeeded {
 	action: "CLARIFICATION_NEEDED";
 	conflicts: ConflictDetectionResult["conflicts"];
 }
 
+/** Result of exporting game findings to files. */
 export interface ExportResult {
 	gameId: string;
 	outputDir: string;
 	files: string[];
 }
 
+/**
+ * Central coordinator for Code Hunt game logic.
+ * Manages game lifecycle, phase transitions, and coordinates between
+ * repositories, scorer, and prompt renderer. This is the main API
+ * that the CLI commands interact with.
+ */
 export class Orchestrator {
 	private db: Database;
 	private gameRepo: GameRepository;
@@ -74,6 +84,10 @@ export class Orchestrator {
 		this.scriptsPath = scriptsPath;
 	}
 
+	/**
+	 * Checks if user's focus prompt conflicts with category exclusions.
+	 * Should be called before setup() to warn users of potential issues.
+	 */
 	checkConflicts(config: SetupConfig): ClarificationNeeded | null {
 		const category = config.category ?? HuntCategory.Bugs;
 		const result = detectPromptConflicts(category, config.userPrompt ?? null);
@@ -87,6 +101,10 @@ export class Orchestrator {
 		return null;
 	}
 
+	/**
+	 * Creates a new game with agents and returns setup information.
+	 * Applies default values for any unspecified config options.
+	 */
 	setup(config: SetupConfig): SetupResult {
 		const category = config.category ?? HuntCategory.Bugs;
 		const userPrompt = config.userPrompt ?? null;
@@ -122,6 +140,11 @@ export class Orchestrator {
 		};
 	}
 
+	/**
+	 * Begins the hunt phase, generating prompts for each agent.
+	 * Returns agent prompts that should be executed by spawned Claude instances.
+	 * @throws Error if game is not in Setup or ReviewScoring phase
+	 */
 	startHunt(gameId: string): HuntPhaseResult {
 		const game = this.requireGame(gameId);
 
@@ -170,6 +193,10 @@ export class Orchestrator {
 		};
 	}
 
+	/**
+	 * Checks hunt phase status - whether time expired or all agents done.
+	 * Used to determine if scoring can begin.
+	 */
 	checkHunt(gameId: string): HuntCheckResult {
 		const game = this.requireGame(gameId);
 
@@ -198,6 +225,10 @@ export class Orchestrator {
 		};
 	}
 
+	/**
+	 * Transitions to hunt scoring phase and returns validation prompts.
+	 * Each prompt guides the referee through validating one finding.
+	 */
 	startHuntScoring(gameId: string): ScoringPhaseResult {
 		const game = this.requireGame(gameId);
 
@@ -245,6 +276,11 @@ export class Orchestrator {
 		};
 	}
 
+	/**
+	 * Records the referee's validation decision for a finding.
+	 * Automatically checks for duplicates when marking as VALID.
+	 * Updates agent scores and statistics accordingly.
+	 */
 	validateFinding(
 		gameId: string,
 		findingId: number,
@@ -280,6 +316,10 @@ export class Orchestrator {
 		return { verdict, duplicateOfId };
 	}
 
+	/**
+	 * Begins the review phase where agents can dispute findings.
+	 * Returns prompts with valid findings that each agent can challenge.
+	 */
 	startReview(gameId: string): ReviewPhaseResult {
 		const game = this.requireGame(gameId);
 
@@ -331,6 +371,10 @@ export class Orchestrator {
 		};
 	}
 
+	/**
+	 * Checks review phase status - whether time expired or all agents done.
+	 * Used to determine if dispute scoring can begin.
+	 */
 	checkReview(gameId: string): ReviewCheckResult {
 		const game = this.requireGame(gameId);
 
@@ -359,6 +403,10 @@ export class Orchestrator {
 		};
 	}
 
+	/**
+	 * Transitions to review scoring phase and returns dispute resolution prompts.
+	 * Each prompt guides the referee through resolving one dispute.
+	 */
 	startReviewScoring(gameId: string): DisputeScoringResult {
 		const game = this.requireGame(gameId);
 
@@ -417,6 +465,10 @@ export class Orchestrator {
 		};
 	}
 
+	/**
+	 * Records the referee's resolution for a dispute.
+	 * If successful, revokes the original finding and adjusts both agents' scores.
+	 */
 	resolveDispute(
 		gameId: string,
 		disputeId: number,
@@ -436,6 +488,10 @@ export class Orchestrator {
 		this.scorer.applyDisputeResolution(dispute, finding, verdict, explanation);
 	}
 
+	/**
+	 * Determines if the game should end or continue to another round.
+	 * Handles target score reached, ties, and max rounds scenarios.
+	 */
 	checkWinner(gameId: string): WinnerCheckResult {
 		const game = this.requireGame(gameId);
 
@@ -534,7 +590,11 @@ export class Orchestrator {
 		};
 	}
 
-	// Agent actions
+	/**
+	 * Records a finding submitted by an agent during hunt phase.
+	 * Returns the new finding's ID. Doc drift category requires evidence snippet.
+	 * @throws Error if not in hunt phase or agent not found
+	 */
 	submitFinding(
 		gameId: string,
 		agentId: string,
@@ -583,6 +643,11 @@ export class Orchestrator {
 		return finding.id;
 	}
 
+	/**
+	 * Records a dispute filed by an agent against another's finding.
+	 * Returns the new dispute's ID. Validates that finding is disputeable.
+	 * @throws Error if not in review phase, agent owns finding, or already disputed
+	 */
 	submitDispute(
 		gameId: string,
 		agentId: string,
@@ -632,6 +697,10 @@ export class Orchestrator {
 		return dispute.id;
 	}
 
+	/**
+	 * Marks an agent as done with the current phase.
+	 * Prevents further submissions from this agent until next round.
+	 */
 	markAgentDone(
 		gameId: string,
 		agentId: string,
@@ -659,27 +728,35 @@ export class Orchestrator {
 		this.agentRepo.update(agent);
 	}
 
-	// Query methods
+	/** Returns a game by ID or null if not found. */
 	getGame(gameId: string): Game | null {
 		return this.gameRepo.findById(gameId);
 	}
 
+	/** Lists all games, most recent first. */
 	getAllGames(): Game[] {
 		return this.gameRepo.findAll();
 	}
 
+	/** Returns the current scoreboard for a game. */
 	getScoreboard(gameId: string) {
 		return this.agentRepo.getScoreboard(gameId);
 	}
 
+	/** Lists all findings for a game. */
 	getFindings(gameId: string) {
 		return this.findingRepo.findByGameId(gameId);
 	}
 
+	/** Lists all disputes for a game. */
 	getDisputes(gameId: string) {
 		return this.disputeRepo.findByGameId(gameId);
 	}
 
+	/**
+	 * Exports game results to the logs directory.
+	 * Creates findings.md, game.json, and full-report.json files.
+	 */
 	exportGame(gameId: string): ExportResult {
 		const game = this.requireGame(gameId);
 		const findings = this.findingRepo.findByGameId(gameId);
@@ -704,6 +781,10 @@ export class Orchestrator {
 		};
 	}
 
+	/**
+	 * Fetches a game by ID or throws if not found.
+	 * Helper for methods that require a valid game.
+	 */
 	private requireGame(gameId: string): Game {
 		const game = this.gameRepo.findById(gameId);
 		if (!game) {
@@ -712,6 +793,7 @@ export class Orchestrator {
 		return game;
 	}
 
+	/** Closes the database connection. Call when shutting down. */
 	close(): void {
 		this.db.close();
 	}

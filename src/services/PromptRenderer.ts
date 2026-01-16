@@ -5,6 +5,7 @@ import {
 import type { Finding } from "../domain/Finding.js";
 import type { HuntCategory, ScoreboardEntry } from "../domain/types.js";
 
+/** Variables needed to render a hunt phase prompt for an agent. */
 export interface HuntPromptVars {
 	gameId: string;
 	agentId: string;
@@ -20,6 +21,7 @@ export interface HuntPromptVars {
 	existingFindings: Finding[]; // Validated findings from previous rounds
 }
 
+/** Variables needed to render a review phase prompt for an agent. */
 export interface ReviewPromptVars {
 	gameId: string;
 	agentId: string;
@@ -33,6 +35,7 @@ export interface ReviewPromptVars {
 	scriptsPath: string;
 }
 
+/** Variables needed to render a finding validation prompt for the referee. */
 export interface FindingValidationVars {
 	gameId: string;
 	findingId: number;
@@ -47,6 +50,7 @@ export interface FindingValidationVars {
 	category: HuntCategory;
 }
 
+/** Variables needed to render a dispute resolution prompt for the referee. */
 export interface DisputeResolutionVars {
 	gameId: string;
 	disputeId: number;
@@ -63,7 +67,15 @@ export interface DisputeResolutionVars {
 	scriptsPath: string;
 }
 
+/**
+ * Generates markdown prompts for agents and referee during game phases.
+ * Prompts include game context, instructions, scoring info, and CLI commands.
+ */
 export class PromptRenderer {
+	/**
+	 * Generates the hunt phase prompt for an agent.
+	 * Includes penalty warnings, existing findings, and submission commands.
+	 */
 	renderHunt(vars: HuntPromptVars): string {
 		const scoreboard = this.formatScoreboard(vars.scoreboard);
 		const existingFindingsList = this.formatExistingFindings(
@@ -135,6 +147,10 @@ ${scoreboard}
 `;
 	}
 
+	/**
+	 * Generates the review phase prompt for an agent.
+	 * Lists valid findings from other agents that can be disputed.
+	 */
 	renderReview(vars: ReviewPromptVars): string {
 		const scoreboard = this.formatScoreboard(vars.scoreboard);
 		const findings = this.formatFindings(vars.findings);
@@ -178,6 +194,11 @@ Successful disputes earn points. Failed disputes cost points.
 `;
 	}
 
+	/**
+	 * Generates a finding validation prompt for the referee.
+	 * Includes category-specific criteria and edge case rulings.
+	 * Doc drift category gets a specialized verification prompt.
+	 */
 	renderFindingValidation(vars: FindingValidationVars): string {
 		const criteria = ACCEPTANCE_CRITERIA[vars.category];
 		const edgeCaseSection = this.formatEdgeCasesForReferee(vars.category);
@@ -234,6 +255,10 @@ ${vars.scriptsPath}/validate.sh ${vars.gameId} ${vars.findingId} <VALID|FALSE|DU
 `;
 	}
 
+	/**
+	 * Specialized validation prompt for doc_drift findings.
+	 * Requires the referee to independently verify both documentation and code claims.
+	 */
 	private renderDocDriftValidation(
 		vars: FindingValidationVars,
 		criteria: (typeof ACCEPTANCE_CRITERIA)[keyof typeof ACCEPTANCE_CRITERIA],
@@ -305,6 +330,7 @@ ${vars.scriptsPath}/validate.sh ${vars.gameId} ${vars.findingId} <VALID|FALSE|DU
 `;
 	}
 
+	/** Formats edge case rulings as a markdown section for referee prompts. */
 	private formatEdgeCasesForReferee(category: HuntCategory): string {
 		const criteria = ACCEPTANCE_CRITERIA[category];
 		if (!criteria?.edgeCases.length) return "";
@@ -336,6 +362,10 @@ ${vars.scriptsPath}/validate.sh ${vars.gameId} ${vars.findingId} <VALID|FALSE|DU
 		return lines.join("\n");
 	}
 
+	/**
+	 * Generates a dispute resolution prompt for the referee.
+	 * Shows the original finding, dispute reason, and asks for a verdict.
+	 */
 	renderDisputeResolution(vars: DisputeResolutionVars): string {
 		return `# Dispute Resolution
 
@@ -375,6 +405,7 @@ FAILED = Finding was correct, dispute fails
 `;
 	}
 
+	/** Formats scoreboard entries as a markdown table. */
 	private formatScoreboard(entries: ScoreboardEntry[]): string {
 		if (entries.length === 0) return "_No agents yet_";
 
@@ -390,6 +421,7 @@ FAILED = Finding was correct, dispute fails
 		return [header, separator, ...rows].join("\n");
 	}
 
+	/** Formats findings as markdown sections for review prompts. */
 	private formatFindings(findings: Finding[]): string {
 		if (findings.length === 0) return "_No findings to review_";
 
@@ -405,6 +437,7 @@ FAILED = Finding was correct, dispute fails
 			.join("\n");
 	}
 
+	/** Formats existing findings grouped by file to warn agents of duplicates. */
 	private formatExistingFindings(findings: Finding[]): string {
 		if (findings.length === 0) return "_No validated findings yet_";
 

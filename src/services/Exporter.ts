@@ -8,20 +8,32 @@ import type { ScoreboardEntry } from "../domain/types.js";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const LOGS_DIR = join(__dirname, "..", "..", "logs");
 
+/** Data needed to export a completed game's results. */
 export interface ExportData {
 	game: Game;
 	findings: Finding[];
 	scoreboard: ScoreboardEntry[];
-	totalDuration: number; // seconds
+	/** Total game duration in seconds. */
+	totalDuration: number;
 }
 
+/**
+ * Exports game results to various file formats.
+ * Creates a game-specific directory under logs/ with markdown and JSON reports.
+ */
 export class Exporter {
+	/** Creates directory if it doesn't exist. */
 	private ensureDir(dir: string): void {
 		if (!existsSync(dir)) {
 			mkdirSync(dir, { recursive: true });
 		}
 	}
 
+	/**
+	 * Exports game results to the logs directory.
+	 * Creates findings.md (human-readable), game.json (summary), and full-report.json (complete).
+	 * @returns Path to the created game directory
+	 */
 	export(data: ExportData): string {
 		const gameDir = join(LOGS_DIR, data.game.id);
 		this.ensureDir(gameDir);
@@ -47,6 +59,7 @@ export class Exporter {
 		return gameDir;
 	}
 
+	/** Formats seconds into human-readable duration string. */
 	private formatDuration(seconds: number): string {
 		const hours = Math.floor(seconds / 3600);
 		const mins = Math.floor((seconds % 3600) / 60);
@@ -57,6 +70,10 @@ export class Exporter {
 		return `${mins}m ${secs}s`;
 	}
 
+	/**
+	 * Generates findings.md with game summary and validated findings.
+	 * Findings are grouped by confidence level (high/medium/low).
+	 */
 	private renderFindingsMarkdown(data: ExportData): string {
 		const { game, findings, scoreboard } = data;
 		const validFindings = findings.filter((f) => f.isValid);
@@ -153,6 +170,7 @@ export class Exporter {
 		return lines.join("\n");
 	}
 
+	/** Generates game.json with config, scores, and outcome summary. */
 	private renderGameJson(data: ExportData): object {
 		const { game, scoreboard } = data;
 		return {
@@ -170,6 +188,7 @@ export class Exporter {
 		};
 	}
 
+	/** Generates full-report.json with complete game state and all findings. */
 	private renderFullReport(data: ExportData): object {
 		const { game, findings, scoreboard } = data;
 		return {
