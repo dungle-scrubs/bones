@@ -1,0 +1,251 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('https://fonts.gstatic.com/s/jetbrainsmono/v18/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKxjPVmUsaaDhw.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('https://fonts.gstatic.com/s/jetbrainsmono/v18/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKxjDFyUsaaDhw.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('https://fonts.gstatic.com/s/jetbrainsmono/v18/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKxjNVyUsaaDhw.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Space Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('https://fonts.gstatic.com/s/spacemono/v12/i7dPIFZifjKcF5UAWdDRYEF8RQ.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Space Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('https://fonts.gstatic.com/s/spacemono/v12/i7dMIFZifjKcF5UAWdDRaPpZUFWaHg.woff2') format('woff2');
+}
+
+@theme {
+  /* Industrial control room palette */
+  --color-background: oklch(0.08 0.01 260);
+  --color-foreground: oklch(0.92 0.02 200);
+  --color-card: oklch(0.11 0.015 260);
+  --color-card-foreground: oklch(0.92 0.02 200);
+  --color-popover: oklch(0.13 0.02 260);
+  --color-popover-foreground: oklch(0.92 0.02 200);
+
+  /* Neon accent system */
+  --color-primary: oklch(0.75 0.18 180); /* Cyan */
+  --color-primary-foreground: oklch(0.12 0.02 260);
+  --color-secondary: oklch(0.18 0.02 260);
+  --color-secondary-foreground: oklch(0.75 0.02 200);
+  --color-muted: oklch(0.2 0.015 260);
+  --color-muted-foreground: oklch(0.55 0.02 200);
+  --color-accent: oklch(0.7 0.2 330); /* Magenta */
+  --color-accent-foreground: oklch(0.95 0 0);
+  --color-destructive: oklch(0.65 0.22 25);
+  --color-destructive-foreground: oklch(0.98 0 0);
+  --color-border: oklch(0.25 0.02 260);
+  --color-input: oklch(0.15 0.02 260);
+  --color-ring: oklch(0.75 0.18 180);
+
+  /* Game phase colors - neon variants */
+  --color-hunt: oklch(0.82 0.19 90); /* Electric yellow */
+  --color-review: oklch(0.72 0.16 220); /* Electric blue */
+  --color-scoring: oklch(0.78 0.2 55); /* Orange */
+  --color-complete: oklch(0.7 0.2 330); /* Magenta */
+  --color-winner: oklch(0.82 0.19 90);
+
+  /* Status colors */
+  --color-valid: oklch(0.72 0.2 155); /* Neon green */
+  --color-invalid: oklch(0.65 0.22 25); /* Neon red */
+  --color-duplicate: oklch(0.78 0.16 70); /* Amber */
+  --color-pending: oklch(0.55 0.02 200); /* Neutral */
+
+  /* Border radius - sharp industrial */
+  --radius-lg: 4px;
+  --radius-md: 3px;
+  --radius-sm: 2px;
+
+  /* Font families */
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --font-display: 'Space Mono', 'JetBrains Mono', monospace;
+}
+
+html {
+  font-family: var(--font-mono);
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scanline overlay effect */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.03) 2px,
+    rgba(0, 0, 0, 0.03) 4px
+  );
+}
+
+/* Grid background pattern */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  background-image:
+    linear-gradient(rgba(120, 200, 220, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(120, 200, 220, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* Custom scrollbar - minimal industrial */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-background);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 0;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary);
+}
+
+/* Focus ring */
+:focus-visible {
+  outline: 1px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Selection */
+::selection {
+  background: oklch(0.75 0.18 180 / 0.3);
+  color: var(--color-foreground);
+}
+
+/* Utility classes */
+.font-display {
+  font-family: var(--font-display);
+}
+
+.text-glow {
+  text-shadow: 0 0 10px currentColor, 0 0 20px currentColor;
+}
+
+.text-glow-sm {
+  text-shadow: 0 0 6px currentColor;
+}
+
+/* Data table styles */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.data-table th {
+  text-align: left;
+  padding: 8px 12px;
+  background: var(--color-secondary);
+  border-bottom: 1px solid var(--color-border);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-muted-foreground);
+  font-size: 10px;
+}
+
+.data-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.data-table tbody tr:hover {
+  background: var(--color-secondary);
+}
+
+/* Checkbox custom style - square industrial */
+input[type="checkbox"] {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  background: var(--color-input);
+  border: 1px solid var(--color-border);
+  border-radius: 0;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.15s ease;
+}
+
+input[type="checkbox"]:hover {
+  border-color: var(--color-primary);
+}
+
+input[type="checkbox"]:checked {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--color-primary-foreground);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+/* Animations */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes scan {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
