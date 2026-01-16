@@ -143,10 +143,104 @@ app.get("/api/games/:id/disputes", (c) => {
 	});
 });
 
+// SSE endpoint for real-time game updates
+app.get("/api/games/:id/events", async (c) => {
+	const gameId = c.req.param("id");
+
+	const game = orchestrator.getGame(gameId);
+	if (!game) {
+		return c.json({ error: `Game not found: ${gameId}` }, 404);
+	}
+
+	return c.newResponse(
+		new ReadableStream({
+			start(controller) {
+				const encoder = new TextEncoder();
+				let interval: ReturnType<typeof setInterval> | null = null;
+
+				const sendEvent = (data: object) => {
+					controller.enqueue(
+						encoder.encode(`data: ${JSON.stringify(data)}\n\n`),
+					);
+				};
+
+				// Send initial state
+				const sendState = () => {
+					const currentGame = orchestrator.getGame(gameId);
+					if (!currentGame) {
+						// Game was deleted - clean up interval before closing
+						if (interval) {
+							clearInterval(interval);
+							interval = null;
+						}
+						controller.close();
+						return;
+					}
+
+					const scoreboard = orchestrator.getScoreboard(gameId);
+					const findings = orchestrator.getFindings(gameId);
+					const disputes = orchestrator.getDisputes(gameId);
+
+					const stats = {
+						totalFindings: findings.length,
+						validFindings: findings.filter((f) => f.status === "valid").length,
+						pendingFindings: findings.filter((f) => f.status === "pending")
+							.length,
+						totalDisputes: disputes.length,
+						pendingDisputes: disputes.filter((d) => d.status === "pending")
+							.length,
+					};
+
+					sendEvent({
+						game: {
+							id: currentGame.id,
+							phase: currentGame.phase,
+							round: currentGame.round,
+							targetScore: currentGame.config.targetScore,
+							huntDuration: currentGame.config.huntDuration,
+							reviewDuration: currentGame.config.reviewDuration,
+							phaseEndsAt: currentGame.phaseEndsAt?.toISOString() ?? null,
+							timeRemaining: currentGame.timeRemaining,
+							winner: currentGame.winnerId,
+							isComplete: currentGame.isComplete,
+							createdAt: currentGame.createdAt.toISOString(),
+							completedAt: currentGame.completedAt?.toISOString() ?? null,
+						},
+						scoreboard,
+						stats,
+						timestamp: new Date().toISOString(),
+					});
+				};
+
+				// Send initial state immediately
+				sendState();
+
+				// Poll and send updates
+				interval = setInterval(sendState, 1000);
+
+				// Clean up on close
+				c.req.raw.signal.addEventListener("abort", () => {
+					if (interval) {
+						clearInterval(interval);
+						interval = null;
+					}
+				});
+			},
+		}),
+		{
+			headers: {
+				"Content-Type": "text/event-stream",
+				"Cache-Control": "no-cache",
+				Connection: "keep-alive",
+			},
+		},
+	);
+});
+
 // Health check
 app.get("/health", (c) => c.json({ status: "ok" }));
 
-const port = parseInt(process.env.CODE_HUNT_PORT ?? "3100", 10);
+const port = parseInt(process.env.CODE_HUNT_PORT ?? "8019", 10);
 
 console.log(`Code Hunt API server starting on http://localhost:${port}`);
 console.log(`  Database: ${dbPath}`);

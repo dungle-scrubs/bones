@@ -6,10 +6,10 @@
  * Run with: node orchestrator.mjs <command> <game_id> [args]
  */
 
-import { execSync } from "child_process";
-import { readFileSync } from "fs";
-import { dirname, resolve } from "path";
-import { fileURLToPath } from "url";
+import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SCRIPTS = __dirname;
@@ -178,7 +178,7 @@ const commands = {
 		);
 
 		const agents = [];
-		for (let i = 1; i <= parseInt(numAgents); i++) {
+		for (let i = 1; i <= parseInt(numAgents, 10); i++) {
 			const agentId = `agent_${i}`;
 			gameState("add-agent", game.id, agentId);
 			agents.push(agentId);
@@ -319,7 +319,7 @@ const commands = {
 				"Agents see VALIDATED bugs and can dispute the referee's decisions",
 				"Agents will call finish-review when done",
 				`Poll: node "${SCRIPTS}/orchestrator.mjs" check-review ${gameId}`,
-				"When ready: node orchestrator.mjs start-review-scoring " + gameId,
+				`When ready: node orchestrator.mjs start-review-scoring ${gameId}`,
 			],
 		};
 	},

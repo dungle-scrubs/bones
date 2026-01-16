@@ -123,17 +123,73 @@ export class FindingRepository {
 		return rows.map(Finding.fromRow);
 	}
 
-	findByPatternHash(gameId: string, patternHash: string): Finding | null {
-		// Include both valid AND pending findings for duplicate detection
-		// This prevents two agents submitting the same bug before validation
+	findByPatternHash(
+		gameId: string,
+		patternHash: string,
+		validOnly = false,
+	): Finding | null {
+		// When validOnly is true, only check against validated findings
+		// When false, include both valid AND pending to prevent duplicate submissions
+		const statusClause = validOnly
+			? "status = 'valid'"
+			: "status IN ('valid', 'pending')";
 		const stmt = this.db.connection.prepare(`
       SELECT * FROM findings
-      WHERE game_id = ? AND pattern_hash = ? AND status IN ('valid', 'pending')
+      WHERE game_id = ? AND pattern_hash = ? AND ${statusClause}
       ORDER BY id ASC
       LIMIT 1
     `);
 		const row = stmt.get(gameId, patternHash) as FindingRow | undefined;
 		return row ? Finding.fromRow(row) : null;
+	}
+
+	// Find potential duplicates using overlap detection
+	// Returns findings in same file with overlapping line ranges
+	findPotentialDuplicates(
+		gameId: string,
+		filePath: string,
+		lineStart: number,
+		lineEnd: number,
+	): Finding[] {
+		const stmt = this.db.connection.prepare(`
+      SELECT * FROM findings
+      WHERE game_id = ?
+        AND file_path = ?
+        AND status IN ('valid', 'pending')
+        AND line_start <= ?
+        AND line_end >= ?
+      ORDER BY id ASC
+    `);
+		const rows = stmt.all(gameId, filePath, lineEnd, lineStart) as FindingRow[];
+		return rows.map(Finding.fromRow);
+	}
+
+	// Find best duplicate match using similarity scoring
+	findBestDuplicateMatch(
+		gameId: string,
+		newFinding: Finding,
+		threshold = 0.5,
+	): Finding | null {
+		const candidates = this.findPotentialDuplicates(
+			gameId,
+			newFinding.filePath,
+			newFinding.lineStart,
+			newFinding.lineEnd,
+		);
+
+		let bestMatch: Finding | null = null;
+		let bestScore = threshold;
+
+		for (const candidate of candidates) {
+			if (candidate.id === newFinding.id) continue;
+			const score = newFinding.similarityScore(candidate);
+			if (score > bestScore) {
+				bestScore = score;
+				bestMatch = candidate;
+			}
+		}
+
+		return bestMatch;
 	}
 
 	// Find findings eligible for review (valid findings not submitted by agent)

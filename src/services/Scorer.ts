@@ -100,7 +100,16 @@ export class Scorer {
 	}
 
 	// Check for duplicates before validating
-	checkForDuplicate(finding: Finding, gameId: string): Finding | null {
-		return this.findingRepo.findByPatternHash(gameId, finding.patternHash);
+	// When validOnly is true, only check against already-validated findings
+	checkForDuplicate(
+		finding: Finding,
+		gameId: string,
+		validOnly = false,
+	): Finding | null {
+		return this.findingRepo.findByPatternHash(
+			gameId,
+			finding.patternHash,
+			validOnly,
+		);
 	}
 }

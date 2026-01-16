@@ -1,7 +1,7 @@
 import { Box, Text, useApp, useInput } from "ink";
 import { useEffect, useState } from "react";
-import type { Game } from "../../domain/Game.js";
 import type { Finding } from "../../domain/Finding.js";
+import type { Game } from "../../domain/Game.js";
 import type { ScoreboardEntry } from "../../domain/types.js";
 import type { Orchestrator } from "../../services/Orchestrator.js";
 
@@ -28,19 +28,20 @@ function Header({ game }: { game: Game }) {
 	const phaseDisplay = game.phase.replace("_", " ").toUpperCase();
 
 	return (
-		<Box flexDirection="column" borderStyle="single" paddingX={1} alignSelf="flex-start">
-			<Text bold>
-				CODE HUNT - Round {game.round}
-			</Text>
+		<Box
+			flexDirection="column"
+			borderStyle="single"
+			paddingX={1}
+			alignSelf="flex-start"
+		>
+			<Text bold>CODE HUNT - Round {game.round}</Text>
 			<Text>
 				Phase: <Text color="cyan">{phaseDisplay}</Text>
 				{"  "}
 				{timeRemaining > 0 && (
 					<Text color="yellow">⏱ {formatTime(timeRemaining)} remaining</Text>
 				)}
-				{game.isComplete && (
-					<Text color="green">Winner: {game.winnerId}</Text>
-				)}
+				{game.isComplete && <Text color="green">Winner: {game.winnerId}</Text>}
 			</Text>
 		</Box>
 	);
@@ -55,7 +56,12 @@ function Scoreboard({ scoreboard }: { scoreboard: ScoreboardEntry[] }) {
 	const nameWidth = maxNameLen + 2;
 
 	return (
-		<Box flexDirection="column" borderStyle="single" paddingX={1} alignSelf="flex-start">
+		<Box
+			flexDirection="column"
+			borderStyle="single"
+			paddingX={1}
+			alignSelf="flex-start"
+		>
 			<Box>
 				<Text bold>
 					<Text color="white">{"Agent".padEnd(nameWidth)}</Text>
@@ -74,7 +80,9 @@ function Scoreboard({ scoreboard }: { scoreboard: ScoreboardEntry[] }) {
 						<Text color="cyan">{String(entry.score).padStart(7)}</Text>
 						<Text color="green">{String(entry.findingsValid).padStart(7)}</Text>
 						<Text color="red">{String(entry.findingsFalse).padStart(7)}</Text>
-						<Text color="yellow">{String(entry.findingsDuplicate).padStart(5)}</Text>
+						<Text color="yellow">
+							{String(entry.findingsDuplicate).padStart(5)}
+						</Text>
 					</Text>
 				</Box>
 			))}
@@ -85,11 +93,20 @@ function Scoreboard({ scoreboard }: { scoreboard: ScoreboardEntry[] }) {
 function Activity({ messages }: { messages: string[] }) {
 	const recent = messages.slice(-3);
 	return (
-		<Box flexDirection="column" borderStyle="single" paddingX={1} alignSelf="flex-start">
-			<Text bold dimColor>Activity</Text>
+		<Box
+			flexDirection="column"
+			borderStyle="single"
+			paddingX={1}
+			alignSelf="flex-start"
+		>
+			<Text bold dimColor>
+				Activity
+			</Text>
 			{recent.length === 0 && <Text dimColor>Waiting for activity...</Text>}
 			{recent.map((msg, i) => (
-				<Text key={i} dimColor>{msg}</Text>
+				<Text key={i} dimColor>
+					{msg}
+				</Text>
 			))}
 		</Box>
 	);
@@ -108,6 +125,7 @@ function Footer() {
 export function GameUI({ gameId, orchestrator }: Props) {
 	const { exit } = useApp();
 	const [state, setState] = useState<GameState | null>(null);
+	const [error, setError] = useState<string | null>(null);
 	const [prevFindingCount, setPrevFindingCount] = useState(0);
 
 	useInput((input) => {
@@ -118,33 +136,44 @@ export function GameUI({ gameId, orchestrator }: Props) {
 
 	useEffect(() => {
 		const poll = () => {
-			const game = orchestrator.getGame(gameId);
-			if (!game) {
-				exit();
-				return;
-			}
-
-			const scoreboard = orchestrator.getScoreboard(gameId);
-			const findings = orchestrator.getFindings(gameId);
-
-			setState((prev) => {
-				const activity = prev?.activity ?? [];
-
-				// Detect new findings
-				if (findings.length > prevFindingCount) {
-					const newFindings = findings.slice(prevFindingCount);
-					for (const f of newFindings) {
-						activity.push(`${f.agentId} submitted finding #${f.id}`);
-					}
-					setPrevFindingCount(findings.length);
+			try {
+				const game = orchestrator.getGame(gameId);
+				if (!game) {
+					setError(`Game not found: ${gameId}`);
+					setTimeout(() => exit(), 2000);
+					return;
 				}
 
-				return { game, scoreboard, findings, activity };
-			});
+				const scoreboard = orchestrator.getScoreboard(gameId);
+				const findings = orchestrator.getFindings(gameId);
 
-			// Auto-exit after game completion
-			if (game.isComplete) {
-				setTimeout(() => exit(), 3000);
+				setState((prev) => {
+					// Create new activity array to avoid mutating state
+					let activity = prev?.activity ?? [];
+
+					// Detect new findings
+					if (findings.length > prevFindingCount) {
+						const newFindings = findings.slice(prevFindingCount);
+						// Create new array with new messages appended
+						activity = [
+							...activity,
+							...newFindings.map(
+								(f) => `${f.agentId} submitted finding #${f.id}`,
+							),
+						];
+						setPrevFindingCount(findings.length);
+					}
+
+					return { game, scoreboard, findings, activity };
+				});
+
+				// Auto-exit after game completion
+				if (game.isComplete) {
+					setTimeout(() => exit(), 3000);
+				}
+			} catch (err) {
+				setError(err instanceof Error ? err.message : "Unknown error");
+				setTimeout(() => exit(), 2000);
 			}
 		};
 
@@ -152,6 +181,23 @@ export function GameUI({ gameId, orchestrator }: Props) {
 		const interval = setInterval(poll, 1000);
 		return () => clearInterval(interval);
 	}, [gameId, orchestrator, exit, prevFindingCount]);
+
+	if (error) {
+		return (
+			<Box
+				flexDirection="column"
+				borderStyle="single"
+				borderColor="red"
+				paddingX={1}
+			>
+				<Text color="red" bold>
+					Error
+				</Text>
+				<Text color="red">{error}</Text>
+				<Text dimColor>Exiting...</Text>
+			</Box>
+		);
+	}
 
 	if (!state) {
 		return <Text>Loading...</Text>;

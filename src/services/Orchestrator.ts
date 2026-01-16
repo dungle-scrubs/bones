@@ -259,8 +259,9 @@ export class Orchestrator {
 		}
 
 		// Check for duplicates if marking as valid
+		// Only check against already-validated findings, not pending ones
 		if (verdict === "VALID") {
-			const duplicate = this.scorer.checkForDuplicate(finding, gameId);
+			const duplicate = this.scorer.checkForDuplicate(finding, gameId, true);
 			if (duplicate && duplicate.id !== finding.id) {
 				verdict = "DUPLICATE";
 				duplicateOfId = duplicate.id;
@@ -483,16 +484,26 @@ export class Orchestrator {
 			const leader = scoreboard[0];
 			if (leader) {
 				// Check for ties at the top score
-				const tiedForFirst = scoreboard.filter(
-					(e) => e.score === leader.score,
-				);
+				const tiedForFirst = scoreboard.filter((e) => e.score === leader.score);
 				if (tiedForFirst.length > 1) {
+					// Tie at max rounds - pick winner randomly to break deadlock
+					const randomIndex = Math.floor(Math.random() * tiedForFirst.length);
+					const tieBreakWinner = tiedForFirst[randomIndex];
+
+					game.complete(tieBreakWinner.id);
+					this.gameRepo.update(game);
+
+					const agent = this.agentRepo.findById(tieBreakWinner.id);
+					if (agent) {
+						agent.declareWinner();
+						this.agentRepo.update(agent);
+					}
+
 					return {
-						action: "TIE_BREAKER",
-						tiedAgents: tiedForFirst.map((w) => w.id),
-						reason: `Max rounds (${maxRounds}) reached with tie at ${leader.score} points: ${tiedForFirst.map((w) => w.id).join(", ")}`,
-						scores: scoreboard,
-						next: `Continue with another round: start-hunt ${gameId}`,
+						action: "GAME_COMPLETE",
+						winner: tieBreakWinner.id,
+						reason: `Max rounds (${maxRounds}) reached with tie at ${leader.score} points. ${tieBreakWinner.id} wins by random tiebreaker among: ${tiedForFirst.map((w) => w.id).join(", ")}`,
+						finalScores: scoreboard,
 					};
 				}
 

@@ -1,12 +1,12 @@
 {
-  "name": "bug-hunt-scripts",
-  "version": "1.0.0",
-  "type": "module",
-  "description": "Game state management for bug-hunt skill",
-  "scripts": {
-    "init-db": "./init-db.sh"
-  },
-  "dependencies": {
-    "sql.js": "^1.10.0"
-  }
+	"name": "bug-hunt-scripts",
+	"version": "1.0.0",
+	"type": "module",
+	"description": "Game state management for bug-hunt skill",
+	"scripts": {
+		"init-db": "./init-db.sh"
+	},
+	"dependencies": {
+		"sql.js": "^1.10.0"
+	}
 }

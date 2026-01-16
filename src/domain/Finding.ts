@@ -68,18 +68,134 @@ export class Finding {
 	}
 
 	// Compute pattern hash for duplicate detection
-	// Normalizes whitespace and lowercases for fuzzy matching
+	// Uses file path + bucketed line range + normalized description keywords
 	static computePatternHash(
 		filePath: string,
 		lineStart: number,
 		lineEnd: number,
 		description: string,
 	): string {
-		const normalized = `${filePath}:${lineStart}-${lineEnd}:${description
-			.toLowerCase()
-			.replace(/\s+/g, " ")
-			.trim()}`;
+		// Bucket line ranges to ~10 line granularity for fuzzy matching
+		const bucketStart = Math.floor(lineStart / 10) * 10;
+		const bucketEnd = Math.ceil(lineEnd / 10) * 10;
+
+		// Extract key terms from description (remove common words)
+		const keyTerms = Finding.extractKeyTerms(description);
+
+		const normalized = `${filePath}:${bucketStart}-${bucketEnd}:${keyTerms}`;
 		return createHash("sha256").update(normalized).digest("hex").slice(0, 16);
+	}
+
+	// Extract key terms from description for fuzzy matching
+	private static extractKeyTerms(description: string): string {
+		const stopWords = new Set([
+			"a",
+			"an",
+			"the",
+			"is",
+			"are",
+			"was",
+			"were",
+			"be",
+			"been",
+			"being",
+			"have",
+			"has",
+			"had",
+			"do",
+			"does",
+			"did",
+			"will",
+			"would",
+			"could",
+			"should",
+			"may",
+			"might",
+			"must",
+			"can",
+			"this",
+			"that",
+			"these",
+			"those",
+			"it",
+			"its",
+			"of",
+			"in",
+			"to",
+			"for",
+			"on",
+			"with",
+			"at",
+			"by",
+			"from",
+			"as",
+			"into",
+			"through",
+			"and",
+			"or",
+			"but",
+			"if",
+			"because",
+			"when",
+			"where",
+			"which",
+			"while",
+			"not",
+			"no",
+		]);
+
+		return description
+			.toLowerCase()
+			.replace(/[^a-z0-9\s]/g, " ")
+			.split(/\s+/)
+			.filter((w) => w.length > 2 && !stopWords.has(w))
+			.sort()
+			.join(" ");
+	}
+
+	// Check if this finding overlaps with another (same file, overlapping lines)
+	overlapsWithLines(otherStart: number, otherEnd: number): boolean {
+		return this.lineStart <= otherEnd && this.lineEnd >= otherStart;
+	}
+
+	// Compute similarity score with another finding (0-1)
+	similarityScore(other: Finding): number {
+		// Must be same file
+		if (this.filePath !== other.filePath) return 0;
+
+		// Calculate line overlap ratio
+		const overlapStart = Math.max(this.lineStart, other.lineStart);
+		const overlapEnd = Math.min(this.lineEnd, other.lineEnd);
+		const overlapLines = Math.max(0, overlapEnd - overlapStart + 1);
+		const totalLines = Math.max(
+			this.lineEnd - this.lineStart + 1,
+			other.lineEnd - other.lineStart + 1,
+		);
+		const lineOverlap = overlapLines / totalLines;
+
+		// Calculate description keyword overlap
+		const thisTermsStr = Finding.extractKeyTerms(this.description);
+		const otherTermsStr = Finding.extractKeyTerms(other.description);
+
+		// Handle empty key terms - if both empty, consider descriptions equal for overlap
+		// If only one is empty, there's no description overlap
+		let descOverlap = 0;
+		if (thisTermsStr === "" && otherTermsStr === "") {
+			descOverlap = 1; // Both have no key terms, treat as matching
+		} else if (thisTermsStr === "" || otherTermsStr === "") {
+			descOverlap = 0; // One has terms, one doesn't - no overlap
+		} else {
+			const thisTerms = new Set(thisTermsStr.split(" "));
+			const otherTerms = new Set(otherTermsStr.split(" "));
+			const commonTerms = [...thisTerms].filter((t) =>
+				otherTerms.has(t),
+			).length;
+			const totalTerms = Math.max(thisTerms.size, otherTerms.size);
+			descOverlap = totalTerms > 0 ? commonTerms / totalTerms : 0;
+		}
+
+		// Weight: 60% line overlap, 40% description overlap
+		return lineOverlap * 0.6 + descOverlap * 0.4;
 	}
 
 	// Validate as a legitimate finding

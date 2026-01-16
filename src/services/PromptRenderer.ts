@@ -107,7 +107,9 @@ ${vars.scriptsPath}/submit.sh ${vars.gameId} ${vars.agentId} <file_path> <line_s
 
 # Mark hunt complete
 ${vars.scriptsPath}/done.sh ${vars.gameId} ${vars.agentId} hunt
-\`\`\`${vars.category === "doc_drift" ? `
+\`\`\`${
+			vars.category === "doc_drift"
+				? `
 
 ## ⚠️ REQUIRED EVIDENCE FORMAT (doc_drift)
 Every submission MUST include a snippet with this exact format:
@@ -122,7 +124,9 @@ CONTRADICTION: <specific mismatch explanation>
 2. Read the code file to verify the ACTUAL behavior
 3. Include both in your snippet - the referee will verify both
 
-Submissions without proper evidence will be rejected.` : ""}
+Submissions without proper evidence will be rejected.`
+				: ""
+		}
 
 ## Current Scoreboard
 ${scoreboard}

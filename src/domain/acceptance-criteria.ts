@@ -126,7 +126,8 @@ export const ACCEPTANCE_CRITERIA: Record<
 			{
 				scenario: "Missing transaction around loop",
 				ruling: "VALID",
-				reason: "IF partial completion causes observable corruption in normal operation",
+				reason:
+					"IF partial completion causes observable corruption in normal operation",
 			},
 			{
 				scenario: "Missing transaction around loop",
