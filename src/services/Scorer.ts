@@ -32,19 +32,35 @@ export class Scorer {
 		confidenceScore?: number,
 		bugCategory?: BugCategory,
 		needsVerification?: boolean,
-	): void {
+		gameId?: string,
+	): { verdict: "VALID" | "FALSE" | "DUPLICATE"; duplicateOfId?: number } {
 		const agent = this.agentRepo.findById(finding.agentId);
 		if (!agent) {
 			throw new Error(`Agent not found: ${finding.agentId}`);
 		}
 
+		let finalVerdict = verdict;
+		let finalDuplicateOfId = duplicateOfId;
+		let finalExplanation = explanation;
+
 		this.db.transaction(() => {
+			// TOCTOU fix: check for duplicates inside transaction when marking as VALID
+			if (finalVerdict === "VALID" && gameId) {
+				const duplicate = this.checkForDuplicate(finding, gameId, true);
+				if (duplicate && duplicate.id !== finding.id) {
+					finalVerdict = "DUPLICATE";
+					finalDuplicateOfId = duplicate.id;
+					finalExplanation = `Duplicate of finding #${duplicate.id}: ${explanation}`;
+					needsVerification = false;
+				}
+			}
+
 			let points: number;
 
-			switch (verdict) {
+			switch (finalVerdict) {
 				case "VALID":
 					points = finding.validate(
-						explanation,
+						finalExplanation,
 						confidence ?? "medium",
 						confidenceScore,
 						bugCategory,
@@ -56,25 +72,27 @@ export class Scorer {
 					}
 					break;
 				case "FALSE":
-					points = finding.markFalseFlag(explanation);
+					points = finding.markFalseFlag(finalExplanation);
 					agent.recordFalseFinding();
 					break;
 				case "DUPLICATE":
-					if (duplicateOfId === undefined) {
+					if (finalDuplicateOfId === undefined) {
 						throw new Error("Duplicate verdict requires duplicateOfId");
 					}
-					points = finding.markDuplicate(duplicateOfId, explanation);
+					points = finding.markDuplicate(finalDuplicateOfId, finalExplanation);
 					agent.recordDuplicateFinding();
 					break;
 			}
 
 			// Only award points if not pending verification
-			if (!needsVerification || verdict !== "VALID") {
+			if (!needsVerification || finalVerdict !== "VALID") {
 				agent.awardPoints(points);
 			}
 			this.findingRepo.update(finding);
 			this.agentRepo.update(agent);
 		});
+
+		return { verdict: finalVerdict, duplicateOfId: finalDuplicateOfId };
 	}
 
 	/**
@@ -104,12 +122,23 @@ export class Scorer {
 
 				// Only revoke if finding is still valid (another dispute may have already revoked it)
 				if (finding.isValid) {
+					// Check if finding was pending verification (stats never recorded)
+					const wasPendingVerification = finding.needsVerification;
+
 					// Reverse the finder's points (they lose the valid finding points)
 					// and get false flag penalty instead
 					finder.awardPoints(-finding.pointsAwarded); // Remove original points
 					finding.revokeValidation(`Disputed: ${explanation}`); // Valid → FalseFlag
 					finder.awardPoints(finding.pointsAwarded); // Apply new (negative) points
-					finder.revertValidToFalse(); // Update stats: valid-- , false++
+
+					// Update stats based on whether verification was pending
+					if (wasPendingVerification) {
+						// Stats were never recorded, just add the false finding
+						finder.recordFalseFinding();
+					} else {
+						// Stats were recorded, revert valid to false
+						finder.revertValidToFalse();
+					}
 				}
 				// If already revoked, disputer still gets points but finding already penalized
 			} else {
