@@ -348,6 +348,8 @@ export class Finding {
 		this._status = FindingStatus.FalseFlag;
 		this._refereeVerdict = verdict;
 		this._pointsAwarded = SCORING.FALSE_FLAG;
+		// Clear verification status to prevent verifyFinding from processing revoked findings
+		this._verificationStatus = VerificationStatus.None;
 		return this._pointsAwarded;
 	}
 
