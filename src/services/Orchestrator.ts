@@ -304,19 +304,9 @@ export class Orchestrator {
 			throw new Error(`Finding not found: ${findingId}`);
 		}
 
-		// Check for duplicates if marking as valid
-		// Only check against already-validated findings, not pending ones
-		if (verdict === "VALID") {
-			const duplicate = this.scorer.checkForDuplicate(finding, gameId, true);
-			if (duplicate && duplicate.id !== finding.id) {
-				verdict = "DUPLICATE";
-				duplicateOfId = duplicate.id;
-				explanation = `Duplicate of finding #${duplicate.id}: ${explanation}`;
-				needsVerification = false; // No need to verify duplicates
-			}
-		}
-
-		this.scorer.applyFindingValidation(
+		// Duplicate check is now done inside applyFindingValidation (inside transaction)
+		// to prevent TOCTOU race conditions
+		const result = this.scorer.applyFindingValidation(
 			finding,
 			verdict,
 			explanation,
@@ -325,9 +315,14 @@ export class Orchestrator {
 			confidenceScore,
 			bugCategory,
 			needsVerification,
+			gameId,
 		);
 
-		return { verdict, duplicateOfId, needsVerification };
+		return {
+			verdict: result.verdict,
+			duplicateOfId: result.duplicateOfId,
+			needsVerification: result.verdict === "VALID" ? needsVerification : false,
+		};
 	}
 
 	/**
@@ -719,6 +714,10 @@ export class Orchestrator {
 			throw new Error(`Agent not found: ${agentId}`);
 		}
 
+		if (agent.hasFinishedHunt(game.round)) {
+			throw new Error("Agent has already finished hunt phase for this round");
+		}
+
 		// doc_drift requires evidence snippet showing doc content vs code content
 		if (game.category === HuntCategory.DocumentationDrift && !codeSnippet) {
 			throw new Error(
@@ -767,6 +766,10 @@ export class Orchestrator {
 		const agent = this.agentRepo.findById(agentId);
 		if (!agent || agent.gameId !== gameId) {
 			throw new Error(`Agent not found: ${agentId}`);
+		}
+
+		if (agent.hasFinishedReview(game.round)) {
+			throw new Error("Agent has already finished review phase for this round");
 		}
 
 		const finding = this.findingRepo.findById(findingId);
