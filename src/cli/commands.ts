@@ -1,3 +1,7 @@
+import { execSync, spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { BugCategory, HuntCategory } from "../domain/types.js";
 import {
 	ensureDashboardRunning,
@@ -5,6 +9,7 @@ import {
 } from "../services/DashboardLauncher.js";
 import type { Orchestrator, SetupConfig } from "../services/Orchestrator.js";
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
 const VALID_CATEGORIES = Object.values(HuntCategory);
 
 /**
@@ -701,5 +706,94 @@ export class Commands {
 
 		await waitUntilExit();
 		return JSON.stringify({ exited: true });
+	}
+
+	/**
+	 * Initializes the project by installing dependencies for all components.
+	 * Required before using --web flag or running the dashboard.
+	 */
+	init(): string {
+		const projectRoot = join(__dirname, "..", "..");
+		const dashboardDir = join(projectRoot, "apps", "dashboard");
+		const results: { step: string; success: boolean; message?: string }[] = [];
+
+		// Check pnpm is available
+		const pnpmCheck = spawnSync("pnpm", ["--version"], { encoding: "utf-8" });
+		if (pnpmCheck.status !== 0) {
+			return JSON.stringify({
+				error:
+					"pnpm is required but not found. Install with: npm install -g pnpm",
+			});
+		}
+
+		// Install root dependencies if node_modules missing
+		const rootNodeModules = join(projectRoot, "node_modules");
+		if (!existsSync(rootNodeModules)) {
+			console.log("Installing root dependencies...");
+			try {
+				execSync("pnpm install", { cwd: projectRoot, stdio: "inherit" });
+				results.push({ step: "root dependencies", success: true });
+			} catch {
+				results.push({
+					step: "root dependencies",
+					success: false,
+					message: "pnpm install failed",
+				});
+			}
+		} else {
+			results.push({
+				step: "root dependencies",
+				success: true,
+				message: "already installed",
+			});
+		}
+
+		// Install dashboard dependencies
+		const dashboardNodeModules = join(dashboardDir, "node_modules");
+		if (!existsSync(dashboardNodeModules)) {
+			console.log("Installing dashboard dependencies...");
+			try {
+				execSync("pnpm install", { cwd: dashboardDir, stdio: "inherit" });
+				results.push({ step: "dashboard dependencies", success: true });
+			} catch {
+				results.push({
+					step: "dashboard dependencies",
+					success: false,
+					message: "pnpm install failed in apps/dashboard",
+				});
+			}
+		} else {
+			results.push({
+				step: "dashboard dependencies",
+				success: true,
+				message: "already installed",
+			});
+		}
+
+		// Build TypeScript
+		console.log("Building TypeScript...");
+		try {
+			execSync("pnpm build", { cwd: projectRoot, stdio: "inherit" });
+			results.push({ step: "typescript build", success: true });
+		} catch {
+			results.push({
+				step: "typescript build",
+				success: false,
+				message: "pnpm build failed",
+			});
+		}
+
+		const allSuccess = results.every((r) => r.success);
+		return JSON.stringify(
+			{
+				success: allSuccess,
+				results,
+				message: allSuccess
+					? "Initialization complete. You can now use --web flag."
+					: "Some steps failed. Check errors above.",
+			},
+			null,
+			2,
+		);
 	}
 }

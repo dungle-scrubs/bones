@@ -27,6 +27,9 @@ if (!command) {
 
 Usage: code-hunt <command> [args]
 
+Setup Commands:
+  init                      Install dependencies (required before --web)
+
 Game Flow Commands:
   setup <url> [options]     Create a new game
     --web, -w               Start API server and dashboard, print URLs
@@ -93,6 +96,7 @@ const commandHandlers: Record<
 	string,
 	(args: string[]) => string | Promise<string>
 > = {
+	init: () => commands.init(),
 	setup: (a) => commands.setup(a),
 	"start-hunt": (a) => commands.startHunt(a),
 	"check-hunt": (a) => commands.checkHunt(a),
