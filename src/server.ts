@@ -167,6 +167,7 @@ app.get("/api/games/:id/events", async (c) => {
 			start(controller) {
 				const encoder = new TextEncoder();
 				let interval: ReturnType<typeof setInterval> | null = null;
+				let closed = false;
 
 				const sendEvent = (data: object) => {
 					controller.enqueue(
@@ -176,6 +177,8 @@ app.get("/api/games/:id/events", async (c) => {
 
 				// Send initial state
 				const sendState = () => {
+					if (closed) return;
+
 					const currentGame = orchestrator.getGame(gameId);
 					if (!currentGame) {
 						// Game was deleted - clean up interval before closing
@@ -183,6 +186,7 @@ app.get("/api/games/:id/events", async (c) => {
 							clearInterval(interval);
 							interval = null;
 						}
+						closed = true;
 						controller.close();
 						return;
 					}
