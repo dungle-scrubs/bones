@@ -1,6 +1,11 @@
 import type { Dispute } from "../domain/Dispute.js";
 import type { Finding } from "../domain/Finding.js";
-import type { BugCategory, Confidence } from "../domain/types.js";
+import type {
+	Confidence,
+	ImpactTier,
+	IssueType,
+	RejectionReason,
+} from "../domain/types.js";
 import type { AgentRepository } from "../repository/AgentRepository.js";
 import type { Database } from "../repository/Database.js";
 import type { DisputeRepository } from "../repository/DisputeRepository.js";
@@ -30,7 +35,9 @@ export class Scorer {
 		confidence?: Confidence,
 		duplicateOfId?: number,
 		confidenceScore?: number,
-		bugCategory?: BugCategory,
+		issueType?: IssueType,
+		impactTier?: ImpactTier,
+		rejectionReason?: RejectionReason,
 		needsVerification?: boolean,
 		gameId?: string,
 	): { verdict: "VALID" | "FALSE" | "DUPLICATE"; duplicateOfId?: number } {
@@ -63,7 +70,8 @@ export class Scorer {
 						finalExplanation,
 						confidence ?? "medium",
 						confidenceScore,
-						bugCategory,
+						issueType,
+						impactTier,
 						needsVerification,
 					);
 					// Only record stats if not pending verification
@@ -72,7 +80,7 @@ export class Scorer {
 					}
 					break;
 				case "FALSE":
-					points = finding.markFalseFlag(finalExplanation);
+					points = finding.markFalseFlag(finalExplanation, rejectionReason);
 					agent.recordFalseFinding();
 					break;
 				case "DUPLICATE":

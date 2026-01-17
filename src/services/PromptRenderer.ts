@@ -3,10 +3,12 @@ import {
 	formatAcceptanceCriteria,
 } from "../domain/acceptance-criteria.js";
 import type { Finding } from "../domain/Finding.js";
-import type {
-	BugCategory,
-	HuntCategory,
-	ScoreboardEntry,
+import {
+	type HuntCategory,
+	ISSUE_TYPES_BY_CATEGORY,
+	type IssueType,
+	RejectionReason,
+	type ScoreboardEntry,
 } from "../domain/types.js";
 
 /** Variables needed to render a hunt phase prompt for an agent. */
@@ -86,7 +88,7 @@ export interface VerificationPromptVars {
 	category: HuntCategory;
 	originalVerdict: string;
 	confidenceScore: number;
-	bugCategory: BugCategory | null;
+	issueType: IssueType | null;
 }
 
 /**
@@ -230,6 +232,16 @@ Successful disputes earn points. Failed disputes cost points.
 			return this.renderDocDriftValidation(vars, criteria, edgeCaseSection);
 		}
 
+		const issueTypes = ISSUE_TYPES_BY_CATEGORY[vars.category];
+		const issueTypeList =
+			issueTypes.length > 0
+				? issueTypes.map((t) => `\`${t}\``).join(", ")
+				: "free-form string for custom category";
+
+		const rejectionReasons = Object.values(RejectionReason)
+			.map((r) => `\`${r}\``)
+			.join(", ");
+
 		return `# Finding Validation
 
 ## Finding Details
@@ -265,34 +277,51 @@ The claim cannot be "verified", only evaluated for logical soundness.
 - **FALSE** = Finding fails to meet criteria OR is an auto-reject case
 - **DUPLICATE** = Same issue already reported (provide duplicate_of_id)
 
-## Classification (REQUIRED for VALID findings)
+## Classification
 
-### Confidence Score (0-100):
+### For VALID findings:
+
+**Confidence Score (0-100):**
 - **90-100**: Issue is obvious from code, no assumptions needed
 - **70-89**: Issue is sound but requires understanding context
 - **50-69**: Issue depends on runtime assumptions, should verify
 - **<50**: Too speculative, likely FALSE
 
-### Bug Category (choose one):
-- **incorrect_behavior**: Causes wrong output, crashes, data corruption, or security issues
-- **defensive_programming**: Suggests adding validation/guards that aren't strictly necessary (often FALSE)
-- **convention**: Style, naming, or best practice that doesn't affect correctness (usually FALSE)
+**Issue Type** (what kind of issue): ${issueTypeList}
 
-### Needs Verification:
-Set to true if:
-- Confidence < 70
-- Category is defensive_programming but you're unsure
-- Claim depends on assumptions you can't fully verify
+**Impact Tier** (how severe):
+- \`critical\`: Data corruption, security breach, crash
+- \`major\`: Wrong output, resource leak, degraded functionality
+- \`minor\`: Edge case, cosmetic, minimal impact
+
+**Needs Verification:** Set true if confidence < 70 or claim depends on unverifiable assumptions
+
+### For FALSE findings:
+
+**Rejection Reason** (why invalid): ${rejectionReasons}
+- \`defensive_suggestion\`: "Add validation" where code works correctly
+- \`unreachable_path\`: Issue can't be reached through public API
+- \`already_guarded\`: Validation exists elsewhere
+- \`speculative\`: "Could fail if..." without showing trigger
+- \`prevented_by_system\`: Type system or framework prevents issue
+- \`misanalyzed_source\`: Agent misread the code
 
 ## Command
 \`\`\`bash
-${vars.scriptsPath}/validate.sh ${vars.gameId} ${vars.findingId} <VALID|FALSE|DUPLICATE> "<explanation>" <confidence_score> <bug_category> <needs_verification> [duplicate_of_id]
+# VALID finding:
+${vars.scriptsPath}/validate.sh ${vars.gameId} ${vars.findingId} VALID "<explanation>" <confidence_score> <issue_type> <impact_tier> <needs_verification>
+
+# FALSE finding:
+${vars.scriptsPath}/validate.sh ${vars.gameId} ${vars.findingId} FALSE "<explanation>" <confidence_score> <rejection_reason>
+
+# DUPLICATE:
+${vars.scriptsPath}/validate.sh ${vars.gameId} ${vars.findingId} DUPLICATE "<explanation>" <duplicate_of_id>
 
 # Examples:
-# Clear bug: validate.sh game-123 45 VALID "Null pointer when X is empty" 95 incorrect_behavior false
-# Needs review: validate.sh game-123 46 VALID "Missing check could cause Y" 65 incorrect_behavior true
-# Defensive: validate.sh game-123 47 FALSE "This is defensive programming - internal API already validates at boundary" 85 defensive_programming false
-# Duplicate: validate.sh game-123 48 DUPLICATE "Same issue as #42" 100 incorrect_behavior false 42
+# Clear valid: validate.sh game-123 45 VALID "Null pointer when X is empty" 95 logic_error critical false
+# Needs review: validate.sh game-123 46 VALID "Missing check could cause Y" 65 missing_validation major true
+# False - defensive: validate.sh game-123 47 FALSE "Internal API already validates at boundary" 85 defensive_suggestion
+# Duplicate: validate.sh game-123 48 DUPLICATE "Same issue as #42" 42
 \`\`\`
 `;
 	}
@@ -449,12 +478,22 @@ FAILED = Finding was correct, dispute fails
 
 	/**
 	 * Generates a verification prompt for findings that need a second opinion.
-	 * Verifier independently analyzes whether the finding is a real bug.
+	 * Verifier independently analyzes whether the finding is a valid issue.
 	 */
 	renderVerificationPrompt(vars: VerificationPromptVars): string {
+		const issueTypes = ISSUE_TYPES_BY_CATEGORY[vars.category];
+		const issueTypeList =
+			issueTypes.length > 0
+				? issueTypes.map((t) => `\`${t}\``).join(", ")
+				: "free-form string";
+
+		const rejectionReasons = Object.values(RejectionReason)
+			.map((r) => `\`${r}\``)
+			.join(", ");
+
 		return `# Finding Verification
 
-**You are an INDEPENDENT VERIFIER.** Your job is to determine if this finding represents a real bug.
+**You are an INDEPENDENT VERIFIER.** Your job is to determine if this finding represents a valid issue.
 
 ## Finding Details
 - **Finding ID:** ${vars.findingId}
@@ -463,7 +502,7 @@ FAILED = Finding was correct, dispute fails
 - **Lines:** ${vars.lineStart}-${vars.lineEnd}
 - **Category:** ${vars.category}
 - **Initial Confidence:** ${vars.confidenceScore}/100
-- **Initial Classification:** ${vars.bugCategory ?? "unknown"}
+- **Initial Issue Type:** ${vars.issueType ?? "unknown"}
 
 ## Original Finding Description
 ${vars.description}
@@ -483,36 +522,41 @@ The initial referee was uncertain about this finding. You must independently ver
 
 ## Classification Guidelines
 
-### Does it cause incorrect behavior? (CONFIRM)
+### Valid Issues (CONFIRM)
 - Causes wrong output, data corruption, crashes
 - Security vulnerability with exploit path
 - Logic error that produces wrong results
 - Race condition with realistic trigger
+- Documentation contradicts actual behavior
 
-### Is it defensive programming? (REJECT)
-- Suggests adding validation that isn't strictly necessary
-- Internal function trusts its caller (and should)
-- Boundary validation already exists at public API
-- "Could fail if..." without showing how caller triggers it
-
-### Is it a convention issue? (REJECT)
-- Style preference, naming convention
-- "Better practice" without correctness impact
-- Unused variable, missing semicolon
+### Invalid - Reject Reasons (REJECT)
+- **defensive_suggestion**: Suggests adding validation that isn't strictly necessary
+- **unreachable_path**: Issue can't be reached through public API
+- **already_guarded**: Boundary validation already exists at public API
+- **speculative**: "Could fail if..." without showing how caller triggers it
+- **style_preference**: Style preference, naming convention, "better practice" without correctness impact
+- **misanalyzed_source**: Agent misread the code
 
 ## Command
 \`\`\`bash
-${vars.scriptsPath}/verify.sh ${vars.gameId} ${vars.findingId} <CONFIRM|REJECT> "<explanation>" [corrected_category]
+# CONFIRM - it's a valid issue:
+${vars.scriptsPath}/verify.sh ${vars.gameId} ${vars.findingId} CONFIRM "<explanation>" [corrected_issue_type]
+
+# REJECT - it's not valid:
+${vars.scriptsPath}/verify.sh ${vars.gameId} ${vars.findingId} REJECT "<explanation>" <rejection_reason>
+
+# Issue types: ${issueTypeList}
+# Rejection reasons: ${rejectionReasons}
 
 # Examples:
-# Confirm as real bug:
-${vars.scriptsPath}/verify.sh ${vars.gameId} ${vars.findingId} CONFIRM "Verified: null pointer occurs when X is empty" incorrect_behavior
+# Confirm:
+${vars.scriptsPath}/verify.sh ${vars.gameId} ${vars.findingId} CONFIRM "Verified: null pointer occurs when X is empty" logic_error
 
-# Reject as defensive programming:
-${vars.scriptsPath}/verify.sh ${vars.gameId} ${vars.findingId} REJECT "This is defensive programming - public API validates at line 42" defensive_programming
+# Reject as defensive:
+${vars.scriptsPath}/verify.sh ${vars.gameId} ${vars.findingId} REJECT "Public API validates at line 42" defensive_suggestion
 
-# Reject as convention:
-${vars.scriptsPath}/verify.sh ${vars.gameId} ${vars.findingId} REJECT "This is a style preference, code works correctly" convention
+# Reject as style:
+${vars.scriptsPath}/verify.sh ${vars.gameId} ${vars.findingId} REJECT "This is a style preference, code works correctly" style_preference
 \`\`\`
 `;
 	}

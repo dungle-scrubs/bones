@@ -1,6 +1,5 @@
 import type { Game } from "../domain/Game.js";
 import {
-	type BugCategory,
 	type Confidence,
 	type ConflictDetectionResult,
 	type DisputeScoringResult,
@@ -9,7 +8,10 @@ import {
 	HuntCategory,
 	type HuntCheckResult,
 	type HuntPhaseResult,
+	type ImpactTier,
+	type IssueType,
 	Phase,
+	type RejectionReason,
 	type ReviewCheckResult,
 	type ReviewPhaseResult,
 	type ScoringPhaseResult,
@@ -122,8 +124,12 @@ export class Orchestrator {
 			maxRounds: config.maxRounds ?? 3, // 0 = no limit
 		};
 
-		const game = this.gameRepo.create(gameConfig);
-		const agents = this.agentRepo.createMany(game.id, gameConfig.numAgents);
+		// Wrap in transaction so game isn't orphaned if agent creation fails
+		const { game, agents } = this.db.transaction(() => {
+			const game = this.gameRepo.create(gameConfig);
+			const agents = this.agentRepo.createMany(game.id, gameConfig.numAgents);
+			return { game, agents };
+		});
 
 		return {
 			action: "GAME_CREATED",
@@ -292,7 +298,9 @@ export class Orchestrator {
 		confidence?: Confidence,
 		duplicateOfId?: number,
 		confidenceScore?: number,
-		bugCategory?: BugCategory,
+		issueType?: IssueType,
+		impactTier?: ImpactTier,
+		rejectionReason?: RejectionReason,
 		needsVerification?: boolean,
 	): {
 		verdict: "VALID" | "FALSE" | "DUPLICATE";
@@ -313,7 +321,9 @@ export class Orchestrator {
 			confidence,
 			duplicateOfId,
 			confidenceScore,
-			bugCategory,
+			issueType,
+			impactTier,
+			rejectionReason,
 			needsVerification,
 			gameId,
 		);
@@ -357,7 +367,7 @@ export class Orchestrator {
 				category: game.category,
 				originalVerdict: finding.refereeVerdict ?? "",
 				confidenceScore: finding.confidenceScore ?? 0,
-				bugCategory: finding.bugCategory,
+				issueType: finding.issueType,
 			}),
 		}));
 
@@ -373,7 +383,8 @@ export class Orchestrator {
 		findingId: number,
 		confirmed: boolean,
 		explanation: string,
-		overriddenCategory?: BugCategory,
+		overriddenIssueType?: IssueType,
+		rejectionReason?: RejectionReason,
 	): { confirmed: boolean; points: number } {
 		const finding = this.findingRepo.findById(findingId);
 		if (!finding || finding.gameId !== gameId) {
@@ -395,7 +406,8 @@ export class Orchestrator {
 			const pts = finding.applyVerification(
 				confirmed,
 				explanation,
-				overriddenCategory,
+				overriddenIssueType,
+				rejectionReason,
 			);
 			agent.awardPoints(pts);
 
