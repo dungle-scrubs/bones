@@ -45,9 +45,14 @@ Game Flow Commands:
   start-hunt <game_id>      Start hunt phase
   check-hunt <game_id>      Check hunt phase status
   start-hunt-scoring <id>   Start scoring hunt findings
-  validate <game_id> <finding_id> <VALID|FALSE|DUPLICATE> <explanation> <confidence_score> <bug_category> <needs_verification> [dup_id]
+  validate - format varies by verdict:
+    VALID:     validate <game_id> <finding_id> VALID <explanation> <score> <issue_type> <impact> <needs_verify>
+    FALSE:     validate <game_id> <finding_id> FALSE <explanation> <score> <rejection_reason>
+    DUPLICATE: validate <game_id> <finding_id> DUPLICATE <explanation> <duplicate_of_id>
   pending-verifications <id>  List findings needing verification
-  verify <game_id> <finding_id> <CONFIRM|REJECT> <explanation> [corrected_category]
+  verify - format varies by verdict:
+    CONFIRM: verify <game_id> <finding_id> CONFIRM <explanation> [issue_type]
+    REJECT:  verify <game_id> <finding_id> REJECT <explanation> <rejection_reason>
 
   start-review <game_id>    Start review phase
   check-review <game_id>    Check review phase status

@@ -2,7 +2,13 @@ import { execSync, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { BugCategory, HuntCategory } from "../domain/types.js";
+import {
+	HuntCategory,
+	type ImpactTier,
+	ISSUE_TYPES_BY_CATEGORY,
+	type IssueType,
+	RejectionReason,
+} from "../domain/types.js";
 import {
 	ensureDashboardRunning,
 	getDashboardUrl,
@@ -204,17 +210,20 @@ export class Commands {
 
 	/**
 	 * Records a referee's validation decision for a finding.
-	 * New format: validate <game_id> <finding_id> <verdict> <explanation> <confidence_score> <bug_category> <needs_verification> [duplicate_of_id]
-	 * Legacy format: validate <game_id> <finding_id> <verdict> <explanation> [confidence] [duplicate_of_id]
+	 * Format varies by verdict:
+	 * - VALID: validate <game_id> <finding_id> VALID <explanation> <confidence_score> <issue_type> <impact_tier> <needs_verification>
+	 * - FALSE: validate <game_id> <finding_id> FALSE <explanation> <confidence_score> <rejection_reason>
+	 * - DUPLICATE: validate <game_id> <finding_id> DUPLICATE <explanation> <duplicate_of_id>
 	 */
 	validate(args: string[]): string {
-		const [gameId, findingIdStr, verdict, explanation, arg5, arg6, arg7, arg8] =
-			args;
+		const [gameId, findingIdStr, verdict, explanation, ...rest] = args;
 
 		if (!gameId || !findingIdStr || !verdict || !explanation) {
 			return JSON.stringify({
-				error:
-					"Usage: validate <game_id> <finding_id> <VALID|FALSE|DUPLICATE> <explanation> <confidence_score:0-100> <bug_category:incorrect_behavior|defensive_programming|convention> <needs_verification:true|false> [duplicate_of_id]",
+				error: `Usage:
+  VALID:     validate <game_id> <finding_id> VALID <explanation> <confidence_score> <issue_type> <impact_tier> <needs_verification>
+  FALSE:     validate <game_id> <finding_id> FALSE <explanation> <confidence_score> <rejection_reason>
+  DUPLICATE: validate <game_id> <finding_id> DUPLICATE <explanation> <duplicate_of_id>`,
 			});
 		}
 
@@ -230,88 +239,113 @@ export class Commands {
 			});
 		}
 
-		// Determine if new or legacy format based on arg5 AND arg6
-		// New format requires: confidence_score (0-100) AND bug_category
-		// Legacy format may have: duplicate_of_id (any integer) or confidence (high|medium|low)
-		const validCategories = Object.values(BugCategory) as string[];
-		const isNewFormat =
-			arg5 !== undefined &&
-			!Number.isNaN(parseInt(arg5, 10)) &&
-			parseInt(arg5, 10) >= 0 &&
-			parseInt(arg5, 10) <= 100 &&
-			arg6 !== undefined &&
-			validCategories.includes(arg6);
-
 		let confidence: "high" | "medium" | "low" | undefined;
 		let confidenceScore: number | undefined;
-		let bugCategory: BugCategory | undefined;
+		let issueType: IssueType | undefined;
+		let impactTier: ImpactTier | undefined;
+		let rejectionReason: RejectionReason | undefined;
 		let needsVerification = false;
 		let duplicateOfId: number | undefined;
 
-		if (isNewFormat) {
-			// New format: confidence_score, bug_category, needs_verification, [duplicate_of_id]
-			confidenceScore = parseInt(arg5, 10);
+		if (normalizedVerdict === "VALID") {
+			// VALID: confidence_score, issue_type, impact_tier, needs_verification
+			const [scoreStr, issueTypeStr, impactStr, verifyStr] = rest;
+
+			if (!scoreStr || !issueTypeStr || !impactStr) {
+				return JSON.stringify({
+					error:
+						"VALID requires: <confidence_score> <issue_type> <impact_tier> <needs_verification>",
+				});
+			}
+
+			confidenceScore = parseInt(scoreStr, 10);
+			if (
+				Number.isNaN(confidenceScore) ||
+				confidenceScore < 0 ||
+				confidenceScore > 100
+			) {
+				return JSON.stringify({
+					error: `confidence_score must be 0-100, got: ${scoreStr}`,
+				});
+			}
 
 			// Map score to legacy confidence level
-			if (confidenceScore >= 90) {
-				confidence = "high";
-			} else if (confidenceScore >= 70) {
-				confidence = "medium";
-			} else {
-				confidence = "low";
+			confidence =
+				confidenceScore >= 90
+					? "high"
+					: confidenceScore >= 70
+						? "medium"
+						: "low";
+
+			issueType = issueTypeStr as IssueType;
+
+			const validImpacts = ["critical", "major", "minor"];
+			if (!validImpacts.includes(impactStr)) {
+				return JSON.stringify({
+					error: `Invalid impact_tier: ${impactStr}. Valid: ${validImpacts.join(", ")}`,
+				});
 			}
+			impactTier = impactStr as ImpactTier;
 
-			// Parse bug_category (already validated in isNewFormat check)
-			bugCategory = arg6 as BugCategory;
-
-			// Parse needs_verification
-			if (arg7) {
-				if (arg7 !== "true" && arg7 !== "false") {
+			if (verifyStr) {
+				if (verifyStr !== "true" && verifyStr !== "false") {
 					return JSON.stringify({
-						error: `Invalid needs_verification: ${arg7}. Must be true or false`,
+						error: `Invalid needs_verification: ${verifyStr}. Must be true or false`,
 					});
 				}
-				needsVerification = arg7 === "true";
+				needsVerification = verifyStr === "true";
+			}
+		} else if (normalizedVerdict === "FALSE") {
+			// FALSE: confidence_score, rejection_reason
+			const [scoreStr, reasonStr] = rest;
+
+			if (!scoreStr || !reasonStr) {
+				return JSON.stringify({
+					error: "FALSE requires: <confidence_score> <rejection_reason>",
+				});
 			}
 
-			// Parse duplicate_of_id (optional)
-			if (arg8) {
-				duplicateOfId = parseInt(arg8, 10);
-				if (Number.isNaN(duplicateOfId)) {
-					return JSON.stringify({
-						error: `Invalid duplicate_of_id: ${arg8}`,
-					});
-				}
+			confidenceScore = parseInt(scoreStr, 10);
+			if (
+				Number.isNaN(confidenceScore) ||
+				confidenceScore < 0 ||
+				confidenceScore > 100
+			) {
+				return JSON.stringify({
+					error: `confidence_score must be 0-100, got: ${scoreStr}`,
+				});
 			}
+
+			confidence =
+				confidenceScore >= 90
+					? "high"
+					: confidenceScore >= 70
+						? "medium"
+						: "low";
+
+			const validReasons = Object.values(RejectionReason) as string[];
+			if (!validReasons.includes(reasonStr)) {
+				return JSON.stringify({
+					error: `Invalid rejection_reason: ${reasonStr}. Valid: ${validReasons.join(", ")}`,
+				});
+			}
+			rejectionReason = reasonStr as RejectionReason;
 		} else {
-			// Legacy format: [confidence:high|medium|low] [duplicate_of_id]
-			if (arg5) {
-				if (["high", "medium", "low"].includes(arg5.toLowerCase())) {
-					confidence = arg5.toLowerCase() as "high" | "medium" | "low";
-					if (arg6) {
-						duplicateOfId = parseInt(arg6, 10);
-						if (Number.isNaN(duplicateOfId)) {
-							return JSON.stringify({
-								error: `Invalid duplicate_of_id: ${arg6}`,
-							});
-						}
-					}
-				} else {
-					duplicateOfId = parseInt(arg5, 10);
-					if (Number.isNaN(duplicateOfId)) {
-						return JSON.stringify({
-							error: `Invalid value: "${arg5}". Expected confidence (high|medium|low) or duplicate_of_id (integer)`,
-						});
-					}
-				}
-			}
-		}
+			// DUPLICATE: duplicate_of_id
+			const [dupIdStr] = rest;
 
-		// Validate duplicate_of_id is only provided for DUPLICATE verdict
-		if (duplicateOfId !== undefined && normalizedVerdict !== "DUPLICATE") {
-			return JSON.stringify({
-				error: `duplicate_of_id provided but verdict is ${normalizedVerdict}, not DUPLICATE`,
-			});
+			if (!dupIdStr) {
+				return JSON.stringify({
+					error: "DUPLICATE requires: <duplicate_of_id>",
+				});
+			}
+
+			duplicateOfId = parseInt(dupIdStr, 10);
+			if (Number.isNaN(duplicateOfId)) {
+				return JSON.stringify({
+					error: `Invalid duplicate_of_id: ${dupIdStr}`,
+				});
+			}
 		}
 
 		const result = this.orchestrator.validateFinding(
@@ -322,7 +356,9 @@ export class Commands {
 			confidence,
 			duplicateOfId,
 			confidenceScore,
-			bugCategory,
+			issueType,
+			impactTier,
+			rejectionReason,
 			needsVerification,
 		);
 
@@ -333,7 +369,9 @@ export class Commands {
 			duplicateOfId: result.duplicateOfId,
 			confidence,
 			confidenceScore,
-			bugCategory,
+			issueType,
+			impactTier,
+			rejectionReason,
 			needsVerification: result.needsVerification,
 		});
 	}
@@ -356,15 +394,17 @@ export class Commands {
 
 	/**
 	 * Records a verification agent's decision on an uncertain finding.
-	 * CONFIRM = it's a real bug, REJECT = it's not
+	 * CONFIRM: verify <game_id> <finding_id> CONFIRM <explanation> [corrected_issue_type]
+	 * REJECT: verify <game_id> <finding_id> REJECT <explanation> <rejection_reason>
 	 */
 	verify(args: string[]): string {
-		const [gameId, findingIdStr, verdict, explanation, categoryOverride] = args;
+		const [gameId, findingIdStr, verdict, explanation, typeOrReason] = args;
 
 		if (!gameId || !findingIdStr || !verdict || !explanation) {
 			return JSON.stringify({
-				error:
-					"Usage: verify <game_id> <finding_id> <CONFIRM|REJECT> <explanation> [corrected_category]",
+				error: `Usage:
+  CONFIRM: verify <game_id> <finding_id> CONFIRM <explanation> [corrected_issue_type]
+  REJECT:  verify <game_id> <finding_id> REJECT <explanation> <rejection_reason>`,
 			});
 		}
 
@@ -380,16 +420,29 @@ export class Commands {
 			});
 		}
 
-		// Parse optional category override
-		let bugCategory: BugCategory | undefined;
-		if (categoryOverride) {
-			const validCategories = Object.values(BugCategory) as string[];
-			if (!validCategories.includes(categoryOverride)) {
+		let issueType: IssueType | undefined;
+		let rejectionReason: RejectionReason | undefined;
+
+		if (normalizedVerdict === "CONFIRM") {
+			// Optional issue type override
+			if (typeOrReason) {
+				issueType = typeOrReason as IssueType;
+			}
+		} else {
+			// REJECT requires rejection_reason
+			if (!typeOrReason) {
 				return JSON.stringify({
-					error: `Invalid category: ${categoryOverride}. Valid values: ${validCategories.join(", ")}`,
+					error: "REJECT requires: <rejection_reason>",
 				});
 			}
-			bugCategory = categoryOverride as BugCategory;
+
+			const validReasons = Object.values(RejectionReason) as string[];
+			if (!validReasons.includes(typeOrReason)) {
+				return JSON.stringify({
+					error: `Invalid rejection_reason: ${typeOrReason}. Valid: ${validReasons.join(", ")}`,
+				});
+			}
+			rejectionReason = typeOrReason as RejectionReason;
 		}
 
 		const result = this.orchestrator.verifyFinding(
@@ -397,7 +450,8 @@ export class Commands {
 			findingId,
 			normalizedVerdict === "CONFIRM",
 			explanation,
-			bugCategory,
+			issueType,
+			rejectionReason,
 		);
 
 		return JSON.stringify({
@@ -405,7 +459,8 @@ export class Commands {
 			findingId,
 			confirmed: result.confirmed,
 			points: result.points,
-			category: bugCategory,
+			issueType,
+			rejectionReason,
 		});
 	}
 
