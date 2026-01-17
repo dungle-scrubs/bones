@@ -62,6 +62,20 @@ VALID_FINDING: +1    FALSE_FLAG: -2    DUPLICATE: -3
 DISPUTE_WON: +2      DISPUTE_LOST: -1
 ```
 
+### Finding Classification Taxonomy
+
+Every finding is classified along multiple dimensions:
+
+**For VALID findings:**
+- `issueType`: Category-specific (e.g., `logic_error`, `broken_example`, `injection`)
+- `impactTier`: `critical` | `major` | `minor`
+- `confidenceScore`: 0-100
+
+**For FALSE findings:**
+- `rejectionReason`: Why rejected (`defensive_suggestion`, `unreachable_path`, `speculative`, etc.)
+
+Issue types are defined per hunt category in `ISSUE_TYPES_BY_CATEGORY` (types.ts).
+
 ### Verification Flow
 
 Low-confidence validations can trigger a second-pass verification agent:
@@ -78,4 +92,7 @@ Low-confidence validations can trigger a second-pass verification agent:
 
 ### Hunt Categories
 
-Built-in categories with curated prompts: `bugs`, `doc_drift`, `security`, `test_coverage`, `tech_debt`, `custom`. Each has valid examples, exclusions, and validation guidance defined in `src/domain/types.ts`.
+Built-in categories with curated prompts: `bugs`, `doc_drift`, `security`, `test_coverage`, `tech_debt`, `custom`. Each has:
+- Category-specific issue types (`BugIssueType`, `DocDriftIssueType`, etc.)
+- Acceptance criteria in `src/domain/acceptance-criteria.ts`
+- Validation guidance in prompts
