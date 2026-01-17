@@ -27,7 +27,9 @@ function createFinding(status: FindingStatus = FindingStatus.Pending): Finding {
 		new Date(),
 		null,
 		null, // confidenceScore
-		null, // bugCategory
+		null, // issueType
+		null, // impactTier
+		null, // rejectionReason
 		VerificationStatus.None,
 		null, // verifierExplanation
 	);
@@ -178,8 +180,10 @@ describe("Finding", () => {
 				0,
 				new Date(),
 				null,
-				null,
-				null,
+				null, // confidenceScore
+				null, // issueType
+				null, // impactTier
+				null, // rejectionReason
 				VerificationStatus.None,
 				null,
 			);
@@ -206,8 +210,10 @@ describe("Finding", () => {
 				0,
 				new Date(),
 				null,
-				null,
-				null,
+				null, // confidenceScore
+				null, // issueType
+				null, // impactTier
+				null, // rejectionReason
 				VerificationStatus.None,
 				null,
 			);
@@ -235,8 +241,10 @@ describe("Finding", () => {
 				0,
 				new Date(),
 				null,
-				null,
-				null,
+				null, // confidenceScore
+				null, // issueType
+				null, // impactTier
+				null, // rejectionReason
 				VerificationStatus.None,
 				null,
 			);

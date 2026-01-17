@@ -652,18 +652,165 @@ export interface AgentRow {
 /** Referee's confidence level in a validation decision. */
 export type Confidence = "high" | "medium" | "low";
 
+// =============================================================================
+// Finding Classification Taxonomy
+// =============================================================================
+
 /**
- * Categorizes the nature of a finding for verification purposes.
- * Determines whether a finding represents a real bug vs defensive suggestion.
+ * Impact severity of a valid finding.
+ * How bad is this issue if it's real?
  */
-export enum BugCategory {
-	/** Causes incorrect output, crashes, data corruption, or security issues */
-	IncorrectBehavior = "incorrect_behavior",
-	/** Suggests adding validation/guards that aren't strictly necessary */
-	DefensiveProgramming = "defensive_programming",
-	/** Style, naming, or best practice that doesn't affect correctness */
-	ConventionIssue = "convention",
+export enum ImpactTier {
+	/** Data corruption, security breach, crash - must fix */
+	Critical = "critical",
+	/** Wrong output, resource leak, degraded functionality */
+	Major = "major",
+	/** Edge case incorrect, cosmetic, minimal user impact */
+	Minor = "minor",
 }
+
+/**
+ * Why a finding was rejected as invalid.
+ * Only populated when the finding is marked FALSE.
+ */
+export enum RejectionReason {
+	/** "Add validation" suggestion where code already works correctly */
+	DefensiveSuggestion = "defensive_suggestion",
+	/** Issue path can't be reached through public API */
+	UnreachablePath = "unreachable_path",
+	/** Validation exists at call site or middleware */
+	AlreadyGuarded = "already_guarded",
+	/** Style/naming preference, not correctness */
+	StylePreference = "style_preference",
+	/** "Could fail if..." without demonstrating reachable trigger */
+	Speculative = "speculative",
+	/** Type system or framework prevents the issue */
+	PreventedBySystem = "prevented_by_system",
+	/** Linter would catch this, not a runtime issue */
+	LinterTerritory = "linter_territory",
+	/** Agent misread the code or documentation */
+	MisanalyzedSource = "misanalyzed_source",
+	/** Valid issue but wrong hunt category */
+	OutOfScope = "out_of_scope",
+	/** Claim doesn't match reality when verified */
+	CantVerify = "cant_verify",
+}
+
+// =============================================================================
+// Category-Specific Issue Types
+// =============================================================================
+
+/** Issue types for bugs category */
+export enum BugIssueType {
+	/** Code executes wrong branch or produces wrong value */
+	LogicError = "logic_error",
+	/** Missing null/bounds/type check where input can violate assumption */
+	MissingValidation = "missing_validation",
+	/** Concurrent access corrupts shared state */
+	RaceCondition = "race_condition",
+	/** File handle, connection, memory not released */
+	ResourceLeak = "resource_leak",
+	/** Error swallowed or mishandled causing silent failure */
+	ErrorMishandling = "error_mishandling",
+	/** API contract violated (caller sends bad input, callee returns unexpected) */
+	ContractViolation = "contract_violation",
+	/** Runtime type differs from expected */
+	TypeMismatch = "type_mismatch",
+}
+
+/** Issue types for documentation drift category */
+export enum DocDriftIssueType {
+	/** Docs describe feature/behavior that doesn't exist */
+	NonexistentFeature = "nonexistent_feature",
+	/** Docs show wrong parameters, return types, or signatures */
+	WrongSignature = "wrong_signature",
+	/** Example code doesn't work as shown */
+	BrokenExample = "broken_example",
+	/** Setup/install instructions fail */
+	WrongInstructions = "wrong_instructions",
+	/** Docs say X happens, code does Y */
+	BehaviorMismatch = "behavior_mismatch",
+	/** Comment describes algorithm incorrectly */
+	StaleComment = "stale_comment",
+	/** Config options documented don't exist or work differently */
+	WrongConfig = "wrong_config",
+}
+
+/** Issue types for security category */
+export enum SecurityIssueType {
+	/** SQL, command, template injection */
+	Injection = "injection",
+	/** Cross-site scripting */
+	XSS = "xss",
+	/** Missing or broken authentication check */
+	AuthBypass = "auth_bypass",
+	/** Broken authorization/permissions */
+	AuthzBypass = "authz_bypass",
+	/** Sensitive data leaked */
+	DataExposure = "data_exposure",
+	/** Hardcoded creds, weak crypto */
+	InsecureSecret = "insecure_secret",
+	/** Directory traversal */
+	PathTraversal = "path_traversal",
+	/** Server-side request forgery */
+	SSRF = "ssrf",
+	/** Insecure deserialization */
+	Deserialization = "deserialization",
+}
+
+/** Issue types for test coverage category */
+export enum TestCoverageIssueType {
+	/** No tests exercise this code */
+	UntestedFunction = "untested_function",
+	/** Specific branch never taken in tests */
+	UntestedBranch = "untested_branch",
+	/** Error handling not tested */
+	UntestedErrorPath = "untested_error_path",
+	/** Boundary condition not tested */
+	UntestedEdgeCase = "untested_edge_case",
+	/** Components work but integration not tested */
+	MissingIntegrationTest = "missing_integration",
+}
+
+/** Issue types for tech debt category */
+export enum TechDebtIssueType {
+	/** Unreachable, never called */
+	DeadCode = "dead_code",
+	/** Copy-paste that should be extracted */
+	DuplicatedLogic = "duplicated_logic",
+	/** Too many responsibilities in one function */
+	GodFunction = "god_function",
+	/** Hardcoded numbers/strings without context */
+	MagicValues = "magic_values",
+	/** Leaky or wrong abstraction */
+	BrokenAbstraction = "broken_abstraction",
+	/** Using deprecated APIs */
+	DeprecatedUsage = "deprecated_usage",
+	/** Known issue marked but not fixed */
+	TodoFixme = "todo_fixme",
+	/** Same thing done different ways */
+	InconsistentPattern = "inconsistent_pattern",
+}
+
+/** All possible issue type values across categories */
+export type IssueType =
+	| BugIssueType
+	| DocDriftIssueType
+	| SecurityIssueType
+	| TestCoverageIssueType
+	| TechDebtIssueType
+	| string; // For custom category
+
+/** Maps hunt categories to their valid issue types */
+export const ISSUE_TYPES_BY_CATEGORY: Record<HuntCategory, readonly string[]> =
+	{
+		[HuntCategory.Bugs]: Object.values(BugIssueType),
+		[HuntCategory.DocumentationDrift]: Object.values(DocDriftIssueType),
+		[HuntCategory.Security]: Object.values(SecurityIssueType),
+		[HuntCategory.TestCoverage]: Object.values(TestCoverageIssueType),
+		[HuntCategory.TechDebt]: Object.values(TechDebtIssueType),
+		[HuntCategory.Custom]: [], // Free-form for custom hunts
+	};
 
 /**
  * Status of the verification step after initial referee validation.
@@ -688,16 +835,24 @@ export interface ValidationResult {
 	verdict: "VALID" | "FALSE" | "DUPLICATE";
 	/** Confidence score 0-100 */
 	confidenceScore: number;
-	/** Classification of what kind of issue this is */
-	bugCategory: BugCategory | null;
+	/** Referee's explanation of the verdict */
+	explanation: string;
 	/** True if a second verification pass should be spawned */
 	needsVerification: boolean;
 	/** Why verification is needed, if applicable */
 	verificationReason?: string;
-	/** Referee's explanation of the verdict */
-	explanation: string;
 	/** For duplicates, the ID of the original finding */
 	duplicateOfId?: number;
+
+	// Classification for VALID findings
+	/** Impact severity: critical, major, minor */
+	impactTier?: ImpactTier;
+	/** Category-specific issue type (e.g., logic_error, broken_example) */
+	issueType?: IssueType;
+
+	// Classification for FALSE findings
+	/** Why the finding was rejected */
+	rejectionReason?: RejectionReason;
 }
 
 /** SQLite row format for findings table. */
@@ -721,8 +876,12 @@ export interface FindingRow {
 	validated_at: string | null;
 	/** 0-100 confidence score from referee */
 	confidence_score: number | null;
-	/** Classification: incorrect_behavior, defensive_programming, convention */
-	bug_category: string | null;
+	/** Category-specific issue type (e.g., logic_error, broken_example) */
+	issue_type: string | null;
+	/** Impact severity: critical, major, minor (for valid findings) */
+	impact_tier: string | null;
+	/** Why finding was rejected (for invalid findings) */
+	rejection_reason: string | null;
 	/** Verification status: none, pending, confirmed, overridden */
 	verification_status: string;
 	/** Explanation from verifier if verification was performed */

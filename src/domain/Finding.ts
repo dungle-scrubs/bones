@@ -1,15 +1,17 @@
 import { createHash } from "node:crypto";
 import {
-	type BugCategory,
 	type Confidence,
 	type FindingRow,
 	FindingStatus,
+	type ImpactTier,
+	type IssueType,
+	type RejectionReason,
 	SCORING,
 	VerificationStatus,
 } from "./types.js";
 
 /**
- * Represents a bug/issue discovered by an agent during the hunt phase.
+ * Represents an issue discovered by an agent during the hunt phase.
  * Findings are submitted with a file location, description, and optional code snippet.
  * They go through validation by the referee and can be disputed by other agents.
  */
@@ -33,7 +35,9 @@ export class Finding {
 		public readonly createdAt: Date,
 		private _validatedAt: Date | null,
 		private _confidenceScore: number | null,
-		private _bugCategory: BugCategory | null,
+		private _issueType: IssueType | null,
+		private _impactTier: ImpactTier | null,
+		private _rejectionReason: RejectionReason | null,
 		private _verificationStatus: VerificationStatus,
 		private _verifierExplanation: string | null,
 	) {}
@@ -66,8 +70,16 @@ export class Finding {
 		return this._confidenceScore;
 	}
 
-	get bugCategory(): BugCategory | null {
-		return this._bugCategory;
+	get issueType(): IssueType | null {
+		return this._issueType;
+	}
+
+	get impactTier(): ImpactTier | null {
+		return this._impactTier;
+	}
+
+	get rejectionReason(): RejectionReason | null {
+		return this._rejectionReason;
 	}
 
 	get verificationStatus(): VerificationStatus {
@@ -249,7 +261,8 @@ export class Finding {
 	 * @param verdict - Referee's explanation of the validation
 	 * @param confidence - high/medium/low confidence level
 	 * @param confidenceScore - 0-100 numerical confidence
-	 * @param bugCategory - Classification of the bug type
+	 * @param issueType - Category-specific issue type (e.g., logic_error, broken_example)
+	 * @param impactTier - Severity: critical, major, minor
 	 * @param needsVerification - Whether to spawn a verification agent
 	 * @returns Points awarded (positive, or 0 if pending verification)
 	 * @throws Error if finding is not in pending status
@@ -258,7 +271,8 @@ export class Finding {
 		verdict: string,
 		confidence: Confidence,
 		confidenceScore?: number,
-		bugCategory?: BugCategory,
+		issueType?: IssueType,
+		impactTier?: ImpactTier,
 		needsVerification?: boolean,
 	): number {
 		if (this._status !== FindingStatus.Pending) {
@@ -268,7 +282,8 @@ export class Finding {
 		this._refereeVerdict = verdict;
 		this._confidence = confidence;
 		this._confidenceScore = confidenceScore ?? null;
-		this._bugCategory = bugCategory ?? null;
+		this._issueType = issueType ?? null;
+		this._impactTier = impactTier ?? null;
 
 		if (needsVerification) {
 			// Don't award points yet - wait for verification
@@ -291,7 +306,8 @@ export class Finding {
 	applyVerification(
 		confirmed: boolean,
 		explanation: string,
-		overriddenCategory?: BugCategory,
+		overriddenIssueType?: IssueType,
+		rejectionReason?: RejectionReason,
 	): number {
 		if (this._verificationStatus !== VerificationStatus.Pending) {
 			throw new Error(
@@ -303,8 +319,8 @@ export class Finding {
 
 		if (confirmed) {
 			this._verificationStatus = VerificationStatus.Confirmed;
-			if (overriddenCategory) {
-				this._bugCategory = overriddenCategory;
+			if (overriddenIssueType) {
+				this._issueType = overriddenIssueType;
 			}
 			this._pointsAwarded = SCORING.VALID_FINDING;
 			return this._pointsAwarded;
@@ -313,6 +329,7 @@ export class Finding {
 		// Verification failed - this was actually a false positive
 		this._verificationStatus = VerificationStatus.Overridden;
 		this._status = FindingStatus.FalseFlag;
+		this._rejectionReason = rejectionReason ?? null;
 		this._pointsAwarded = SCORING.FALSE_FLAG;
 		return this._pointsAwarded;
 	}
@@ -320,15 +337,18 @@ export class Finding {
 	/**
 	 * Marks the finding as a false positive, penalizing the submitting agent.
 	 * Called by the referee when the finding is not a real issue.
+	 * @param verdict - Referee's explanation of why this is invalid
+	 * @param rejectionReason - Category of why this was rejected
 	 * @returns Points awarded (negative)
 	 * @throws Error if finding is not in pending status
 	 */
-	markFalseFlag(verdict: string): number {
+	markFalseFlag(verdict: string, rejectionReason?: RejectionReason): number {
 		if (this._status !== FindingStatus.Pending) {
 			throw new Error(`Cannot mark false flag with status: ${this._status}`);
 		}
 		this._status = FindingStatus.FalseFlag;
 		this._refereeVerdict = verdict;
+		this._rejectionReason = rejectionReason ?? null;
 		this._pointsAwarded = SCORING.FALSE_FLAG;
 		this._validatedAt = new Date();
 		return this._pointsAwarded;
@@ -411,7 +431,9 @@ export class Finding {
 			new Date(),
 			null,
 			null, // confidenceScore
-			null, // bugCategory
+			null, // issueType
+			null, // impactTier
+			null, // rejectionReason
 			VerificationStatus.None,
 			null, // verifierExplanation
 		);
@@ -441,7 +463,9 @@ export class Finding {
 			new Date(row.created_at),
 			row.validated_at ? new Date(row.validated_at) : null,
 			row.confidence_score,
-			row.bug_category as BugCategory | null,
+			row.issue_type as IssueType | null,
+			row.impact_tier as ImpactTier | null,
+			row.rejection_reason as RejectionReason | null,
 			(row.verification_status as VerificationStatus) ||
 				VerificationStatus.None,
 			row.verifier_explanation,
@@ -472,7 +496,9 @@ export class Finding {
 			created_at: this.createdAt.toISOString(),
 			validated_at: this._validatedAt?.toISOString() ?? null,
 			confidence_score: this._confidenceScore,
-			bug_category: this._bugCategory,
+			issue_type: this._issueType,
+			impact_tier: this._impactTier,
+			rejection_reason: this._rejectionReason,
 			verification_status: this._verificationStatus,
 			verifier_explanation: this._verifierExplanation,
 		};
