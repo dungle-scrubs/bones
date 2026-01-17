@@ -65,7 +65,9 @@ CREATE TABLE IF NOT EXISTS findings (
   created_at TEXT DEFAULT (datetime('now')),
   validated_at TEXT,
   confidence_score INTEGER,
-  bug_category TEXT,
+  issue_type TEXT,
+  impact_tier TEXT,
+  rejection_reason TEXT,
   verification_status TEXT DEFAULT 'none',
   verifier_explanation TEXT,
   FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE,
@@ -147,8 +149,23 @@ export class Database {
 		} catch {
 			// Column already exists
 		}
+		// Migration: rename bug_category to issue_type, add impact_tier and rejection_reason
 		try {
-			this.db.exec("ALTER TABLE findings ADD COLUMN bug_category TEXT");
+			this.db.exec("ALTER TABLE findings ADD COLUMN issue_type TEXT");
+			// Copy data from old column if it exists
+			this.db.exec(
+				"UPDATE findings SET issue_type = bug_category WHERE issue_type IS NULL AND bug_category IS NOT NULL",
+			);
+		} catch {
+			// Column already exists
+		}
+		try {
+			this.db.exec("ALTER TABLE findings ADD COLUMN impact_tier TEXT");
+		} catch {
+			// Column already exists
+		}
+		try {
+			this.db.exec("ALTER TABLE findings ADD COLUMN rejection_reason TEXT");
 		} catch {
 			// Column already exists
 		}

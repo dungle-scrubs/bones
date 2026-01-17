@@ -245,7 +245,9 @@ export class FindingRepository {
         points_awarded = ?,
         validated_at = ?,
         confidence_score = ?,
-        bug_category = ?,
+        issue_type = ?,
+        impact_tier = ?,
+        rejection_reason = ?,
         verification_status = ?,
         verifier_explanation = ?
       WHERE id = ?
@@ -259,7 +261,9 @@ export class FindingRepository {
 			row.points_awarded,
 			row.validated_at,
 			row.confidence_score,
-			row.bug_category,
+			row.issue_type,
+			row.impact_tier,
+			row.rejection_reason,
 			row.verification_status,
 			row.verifier_explanation,
 			row.id,
