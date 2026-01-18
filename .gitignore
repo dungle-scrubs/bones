@@ -3,3 +3,4 @@ dist/
 .next/
 *.db
 logs/
+.words_hurt/
