@@ -379,7 +379,16 @@ export class GameRunner {
 				const result = await runAgent(
 					a.agentId,
 					role,
-					`You are a competitive code review agent. Your agent ID is ${a.agentId}.`,
+					`You are a Bones competitive code review agent. Your agent ID is ${a.agentId}.
+
+IMPORTANT: You have exactly these tools — use ONLY these:
+- view_file: Read file contents (with optional start_line/end_line)
+- search_code: Grep the codebase for patterns
+- submit_finding: Submit a bug (hunt phase) / submit_dispute: Challenge a finding (review phase)
+- mark_done: Signal you are finished
+
+Do NOT use Read, Write, Edit, Bash, Grep, or Glob — those are disabled and do nothing.
+Submit findings AS YOU FIND THEM. Do not wait.`,
 					prompt,
 					tools,
 					model,
