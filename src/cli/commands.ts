@@ -5,7 +5,6 @@ import { fileURLToPath } from "node:url";
 import {
 	HuntCategory,
 	type ImpactTier,
-	ISSUE_TYPES_BY_CATEGORY,
 	type IssueType,
 	RejectionReason,
 } from "../domain/types.js";
@@ -22,10 +21,33 @@ import {
 import type { Orchestrator, SetupConfig } from "../services/Orchestrator.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const VALID_CATEGORIES = Object.values(HuntCategory);
+const VALID_CATEGORIES = Object.values(HuntCategory) as string[];
+
+/** Options parsed by commander for the `setup` command. */
+export interface SetupOpts {
+	web?: boolean;
+	category?: string;
+	focus?: string;
+	prompt?: string;
+	target?: string;
+	agents?: string;
+	maxRounds?: string;
+	huntDuration?: string;
+	reviewDuration?: string;
+}
+
+/** Options parsed by commander for the `play` command. */
+export interface PlayOpts extends SetupOpts {
+	model?: string;
+	refereeModel?: string;
+	thinking?: string;
+	refereeThinking?: string;
+	auth?: string;
+}
 
 /**
- * CLI command handlers that parse arguments and delegate to Orchestrator.
+ * CLI command handlers. Commander handles arg parsing;
+ * methods receive typed values and delegate to Orchestrator.
  * Each method returns a JSON string for CLI output.
  */
 export class Commands {
@@ -38,13 +60,10 @@ export class Commands {
 	 * @returns JSON result with login status
 	 */
 	async login(): Promise<string> {
-		const { execSync } = await import("node:child_process");
-
 		try {
 			const credentials = await login(
 				(url) => {
 					console.log(`\nOpen this URL in your browser:\n  ${url}\n`);
-					// Try to open browser automatically
 					try {
 						execSync(`open "${url}"`, { stdio: "ignore" });
 					} catch {
@@ -52,7 +71,6 @@ export class Commands {
 					}
 				},
 				async () => {
-					// Read auth code from stdin
 					const readline = await import("node:readline");
 					const rl = readline.createInterface({
 						input: process.stdin,
@@ -111,122 +129,19 @@ export class Commands {
 	}
 
 	/**
-	 * Creates a new game with agents. Parses config options from args.
+	 * Creates a new game with agents from commander-parsed options.
 	 * With --web flag, starts API server and dashboard.
+	 *
+	 * @param projectUrl - Project URL or local path
+	 * @param opts - Parsed commander options
+	 * @returns JSON game setup result
 	 */
-	async setup(args: string[]): Promise<string> {
-		const projectUrl = args[0];
-		if (!projectUrl) {
-			return JSON.stringify({
-				error: `Usage: setup <project_url> [--web] [--category <${VALID_CATEGORIES.join("|")}>] [--focus <additional_prompt>] [--target <score>] [--hunt-duration <seconds>] [--review-duration <seconds>] [--agents <count>] [--max-rounds <count|0>]`,
-			});
+	async setup(projectUrl: string, opts: SetupOpts): Promise<string> {
+		const config = this.buildSetupConfig(projectUrl, opts);
+		if ("error" in config) {
+			return JSON.stringify(config);
 		}
 
-		const config: SetupConfig = { projectUrl };
-		let startWeb = false;
-
-		// Parse optional arguments
-		let i = 1;
-		while (i < args.length) {
-			const flag = args[i];
-
-			// Handle boolean flags (no value)
-			if (flag === "--web" || flag === "-w") {
-				startWeb = true;
-				i += 1;
-				continue;
-			}
-
-			const value = args[i + 1];
-
-			if (value === undefined) {
-				return JSON.stringify({ error: `Missing value for flag: ${flag}` });
-			}
-
-			switch (flag) {
-				case "--category":
-				case "-c":
-					if (!VALID_CATEGORIES.includes(value as HuntCategory)) {
-						return JSON.stringify({
-							error: `Invalid category: ${value}. Valid categories: ${VALID_CATEGORIES.join(", ")}`,
-						});
-					}
-					config.category = value as HuntCategory;
-					break;
-				case "--focus":
-				case "-f":
-					config.userPrompt = value;
-					break;
-				// Legacy support for --prompt (maps to custom category + user prompt)
-				case "--prompt":
-				case "-p":
-					config.category = HuntCategory.Custom;
-					config.userPrompt = value;
-					break;
-				case "--target":
-				case "-t": {
-					const parsed = parseInt(value, 10);
-					if (Number.isNaN(parsed) || parsed < 1) {
-						return JSON.stringify({
-							error: `--target must be a positive integer, got: ${value}`,
-						});
-					}
-					config.targetScore = parsed;
-					break;
-				}
-				case "--hunt-duration":
-				case "-h": {
-					const parsed = parseInt(value, 10);
-					if (Number.isNaN(parsed) || parsed < 1) {
-						return JSON.stringify({
-							error: `--hunt-duration must be a positive integer, got: ${value}`,
-						});
-					}
-					config.huntDuration = parsed;
-					break;
-				}
-				case "--review-duration":
-				case "-r": {
-					const parsed = parseInt(value, 10);
-					if (Number.isNaN(parsed) || parsed < 1) {
-						return JSON.stringify({
-							error: `--review-duration must be a positive integer, got: ${value}`,
-						});
-					}
-					config.reviewDuration = parsed;
-					break;
-				}
-				case "--agents":
-				case "-a": {
-					const parsed = parseInt(value, 10);
-					if (Number.isNaN(parsed) || parsed < 1) {
-						return JSON.stringify({
-							error: `--agents must be a positive integer, got: ${value}`,
-						});
-					}
-					config.numAgents = parsed;
-					break;
-				}
-				case "--max-rounds":
-				case "-m": {
-					const parsed = parseInt(value, 10);
-					if (Number.isNaN(parsed) || parsed < 0) {
-						return JSON.stringify({
-							error: `--max-rounds must be a non-negative integer (0 = unlimited), got: ${value}`,
-						});
-					}
-					config.maxRounds = parsed; // 0 = no limit
-					break;
-				}
-				default:
-					return JSON.stringify({
-						error: `Unknown flag: ${flag}. Valid flags: --web, --category, --focus, --prompt, --target, --hunt-duration, --review-duration, --agents, --max-rounds`,
-					});
-			}
-			i += 2;
-		}
-
-		// Check for conflicts between userPrompt and category exclusions
 		const conflicts = this.orchestrator.checkConflicts(config);
 		if (conflicts) {
 			return JSON.stringify(conflicts, null, 2);
@@ -234,12 +149,9 @@ export class Commands {
 
 		const result = this.orchestrator.setup(config);
 
-		// Start web services if --web flag provided
-		if (startWeb) {
+		if (opts.web) {
 			const dashboard = await ensureDashboardRunning();
 			const dashboardUrl = getDashboardUrl(result.gameId);
-
-			// Print URLs prominently
 			console.log(`\n🌐 API Server: ${dashboard.api.url}`);
 			console.log(`📊 Dashboard:  ${dashboardUrl}\n`);
 
@@ -260,58 +172,57 @@ export class Commands {
 		return JSON.stringify(result, null, 2);
 	}
 
-	/** Starts the hunt phase, returning agent prompts to spawn. */
-	startHunt(args: string[]): string {
-		const gameId = args[0];
-		if (!gameId) {
-			return JSON.stringify({ error: "Usage: start-hunt <game_id>" });
-		}
-
-		const result = this.orchestrator.startHunt(gameId);
-		return JSON.stringify(result, null, 2);
+	/**
+	 * Starts the hunt phase, returning agent prompts to spawn.
+	 *
+	 * @param gameId - Game identifier
+	 * @returns JSON hunt phase result
+	 */
+	startHunt(gameId: string): string {
+		return JSON.stringify(this.orchestrator.startHunt(gameId), null, 2);
 	}
 
-	/** Checks if hunt phase is ready for scoring. */
-	checkHunt(args: string[]): string {
-		const gameId = args[0];
-		if (!gameId) {
-			return JSON.stringify({ error: "Usage: check-hunt <game_id>" });
-		}
-
-		const result = this.orchestrator.checkHunt(gameId);
-		return JSON.stringify(result, null, 2);
+	/**
+	 * Checks if hunt phase is ready for scoring.
+	 *
+	 * @param gameId - Game identifier
+	 * @returns JSON hunt check result
+	 */
+	checkHunt(gameId: string): string {
+		return JSON.stringify(this.orchestrator.checkHunt(gameId), null, 2);
 	}
 
-	/** Transitions to hunt scoring, returning validation prompts. */
-	startHuntScoring(args: string[]): string {
-		const gameId = args[0];
-		if (!gameId) {
-			return JSON.stringify({ error: "Usage: start-hunt-scoring <game_id>" });
-		}
-
-		const result = this.orchestrator.startHuntScoring(gameId);
-		return JSON.stringify(result, null, 2);
+	/**
+	 * Transitions to hunt scoring, returning validation prompts.
+	 *
+	 * @param gameId - Game identifier
+	 * @returns JSON scoring phase result
+	 */
+	startHuntScoring(gameId: string): string {
+		return JSON.stringify(this.orchestrator.startHuntScoring(gameId), null, 2);
 	}
 
 	/**
 	 * Records a referee's validation decision for a finding.
-	 * Format varies by verdict:
-	 * - VALID: validate <game_id> <finding_id> VALID <explanation> <confidence_score> <issue_type> <impact_tier> <needs_verification>
-	 * - FALSE: validate <game_id> <finding_id> FALSE <explanation> <confidence_score> <rejection_reason>
-	 * - DUPLICATE: validate <game_id> <finding_id> DUPLICATE <explanation> <duplicate_of_id>
+	 * Verdict-specific extra args vary by type:
+	 * - VALID: [confidenceScore, issueType, impactTier, needsVerification?]
+	 * - FALSE: [confidenceScore, rejectionReason]
+	 * - DUPLICATE: [duplicateOfId]
+	 *
+	 * @param gameId - Game identifier
+	 * @param findingIdStr - Finding ID as string (parsed to int)
+	 * @param verdict - VALID | FALSE | DUPLICATE
+	 * @param explanation - Referee explanation
+	 * @param extra - Verdict-specific positional args
+	 * @returns JSON validation result
 	 */
-	validate(args: string[]): string {
-		const [gameId, findingIdStr, verdict, explanation, ...rest] = args;
-
-		if (!gameId || !findingIdStr || !verdict || !explanation) {
-			return JSON.stringify({
-				error: `Usage:
-  VALID:     validate <game_id> <finding_id> VALID <explanation> <confidence_score> <issue_type> <impact_tier> <needs_verification>
-  FALSE:     validate <game_id> <finding_id> FALSE <explanation> <confidence_score> <rejection_reason>
-  DUPLICATE: validate <game_id> <finding_id> DUPLICATE <explanation> <duplicate_of_id>`,
-			});
-		}
-
+	validate(
+		gameId: string,
+		findingIdStr: string,
+		verdict: string,
+		explanation: string,
+		extra: string[],
+	): string {
 		const findingId = parseInt(findingIdStr, 10);
 		if (Number.isNaN(findingId)) {
 			return JSON.stringify({ error: "finding_id must be a valid integer" });
@@ -333,13 +244,11 @@ export class Commands {
 		let duplicateOfId: number | undefined;
 
 		if (normalizedVerdict === "VALID") {
-			// VALID: confidence_score, issue_type, impact_tier, needs_verification
-			const [scoreStr, issueTypeStr, impactStr, verifyStr] = rest;
-
+			const [scoreStr, issueTypeStr, impactStr, verifyStr] = extra;
 			if (!scoreStr || !issueTypeStr || !impactStr) {
 				return JSON.stringify({
 					error:
-						"VALID requires: <confidence_score> <issue_type> <impact_tier> <needs_verification>",
+						"VALID requires: <confidence_score> <issue_type> <impact_tier> [needs_verification]",
 				});
 			}
 
@@ -354,14 +263,12 @@ export class Commands {
 				});
 			}
 
-			// Map score to legacy confidence level
 			confidence =
 				confidenceScore >= 90
 					? "high"
 					: confidenceScore >= 70
 						? "medium"
 						: "low";
-
 			issueType = issueTypeStr as IssueType;
 
 			const validImpacts = ["critical", "major", "minor"];
@@ -372,18 +279,14 @@ export class Commands {
 			}
 			impactTier = impactStr as ImpactTier;
 
-			if (verifyStr) {
-				if (verifyStr !== "true" && verifyStr !== "false") {
-					return JSON.stringify({
-						error: `Invalid needs_verification: ${verifyStr}. Must be true or false`,
-					});
-				}
-				needsVerification = verifyStr === "true";
+			if (verifyStr === "true") needsVerification = true;
+			else if (verifyStr && verifyStr !== "false") {
+				return JSON.stringify({
+					error: `needs_verification must be true or false, got: ${verifyStr}`,
+				});
 			}
 		} else if (normalizedVerdict === "FALSE") {
-			// FALSE: confidence_score, rejection_reason
-			const [scoreStr, reasonStr] = rest;
-
+			const [scoreStr, reasonStr] = extra;
 			if (!scoreStr || !reasonStr) {
 				return JSON.stringify({
 					error: "FALSE requires: <confidence_score> <rejection_reason>",
@@ -416,15 +319,12 @@ export class Commands {
 			}
 			rejectionReason = reasonStr as RejectionReason;
 		} else {
-			// DUPLICATE: duplicate_of_id
-			const [dupIdStr] = rest;
-
+			const [dupIdStr] = extra;
 			if (!dupIdStr) {
 				return JSON.stringify({
 					error: "DUPLICATE requires: <duplicate_of_id>",
 				});
 			}
-
 			duplicateOfId = parseInt(dupIdStr, 10);
 			if (Number.isNaN(duplicateOfId)) {
 				return JSON.stringify({
@@ -463,36 +363,35 @@ export class Commands {
 
 	/**
 	 * Returns findings that need verification before scoring completes.
-	 * Used to spawn verification agents for uncertain findings.
+	 *
+	 * @param gameId - Game identifier
+	 * @returns JSON list of pending verifications
 	 */
-	getPendingVerifications(args: string[]): string {
-		const gameId = args[0];
-		if (!gameId) {
-			return JSON.stringify({
-				error: "Usage: pending-verifications <game_id>",
-			});
-		}
-
-		const result = this.orchestrator.getPendingVerifications(gameId);
-		return JSON.stringify(result, null, 2);
+	getPendingVerifications(gameId: string): string {
+		return JSON.stringify(
+			this.orchestrator.getPendingVerifications(gameId),
+			null,
+			2,
+		);
 	}
 
 	/**
 	 * Records a verification agent's decision on an uncertain finding.
-	 * CONFIRM: verify <game_id> <finding_id> CONFIRM <explanation> [corrected_issue_type]
-	 * REJECT: verify <game_id> <finding_id> REJECT <explanation> <rejection_reason>
+	 *
+	 * @param gameId - Game identifier
+	 * @param findingIdStr - Finding ID as string
+	 * @param verdict - CONFIRM | REJECT
+	 * @param explanation - Verifier explanation
+	 * @param typeOrReason - Issue type (CONFIRM) or rejection reason (REJECT)
+	 * @returns JSON verification result
 	 */
-	verify(args: string[]): string {
-		const [gameId, findingIdStr, verdict, explanation, typeOrReason] = args;
-
-		if (!gameId || !findingIdStr || !verdict || !explanation) {
-			return JSON.stringify({
-				error: `Usage:
-  CONFIRM: verify <game_id> <finding_id> CONFIRM <explanation> [corrected_issue_type]
-  REJECT:  verify <game_id> <finding_id> REJECT <explanation> <rejection_reason>`,
-			});
-		}
-
+	verify(
+		gameId: string,
+		findingIdStr: string,
+		verdict: string,
+		explanation: string,
+		typeOrReason?: string,
+	): string {
 		const findingId = parseInt(findingIdStr, 10);
 		if (Number.isNaN(findingId)) {
 			return JSON.stringify({ error: "finding_id must be a valid integer" });
@@ -500,27 +399,18 @@ export class Commands {
 
 		const normalizedVerdict = verdict.toUpperCase();
 		if (!["CONFIRM", "REJECT"].includes(normalizedVerdict)) {
-			return JSON.stringify({
-				error: "verdict must be CONFIRM or REJECT",
-			});
+			return JSON.stringify({ error: "verdict must be CONFIRM or REJECT" });
 		}
 
 		let issueType: IssueType | undefined;
 		let rejectionReason: RejectionReason | undefined;
 
 		if (normalizedVerdict === "CONFIRM") {
-			// Optional issue type override
-			if (typeOrReason) {
-				issueType = typeOrReason as IssueType;
-			}
+			if (typeOrReason) issueType = typeOrReason as IssueType;
 		} else {
-			// REJECT requires rejection_reason
 			if (!typeOrReason) {
-				return JSON.stringify({
-					error: "REJECT requires: <rejection_reason>",
-				});
+				return JSON.stringify({ error: "REJECT requires: <rejection_reason>" });
 			}
-
 			const validReasons = Object.values(RejectionReason) as string[];
 			if (!validReasons.includes(typeOrReason)) {
 				return JSON.stringify({
@@ -549,50 +439,55 @@ export class Commands {
 		});
 	}
 
-	/** Transitions game to review phase where agents can dispute others' findings. */
-	startReview(args: string[]): string {
-		const gameId = args[0];
-		if (!gameId) {
-			return JSON.stringify({ error: "Usage: start-review <game_id>" });
-		}
-
-		const result = this.orchestrator.startReview(gameId);
-		return JSON.stringify(result, null, 2);
+	/**
+	 * Transitions game to review phase.
+	 *
+	 * @param gameId - Game identifier
+	 * @returns JSON review phase result
+	 */
+	startReview(gameId: string): string {
+		return JSON.stringify(this.orchestrator.startReview(gameId), null, 2);
 	}
 
-	/** Checks if review phase is ready for dispute resolution. */
-	checkReview(args: string[]): string {
-		const gameId = args[0];
-		if (!gameId) {
-			return JSON.stringify({ error: "Usage: check-review <game_id>" });
-		}
-
-		const result = this.orchestrator.checkReview(gameId);
-		return JSON.stringify(result, null, 2);
+	/**
+	 * Checks if review phase is ready for dispute resolution.
+	 *
+	 * @param gameId - Game identifier
+	 * @returns JSON review check result
+	 */
+	checkReview(gameId: string): string {
+		return JSON.stringify(this.orchestrator.checkReview(gameId), null, 2);
 	}
 
-	/** Transitions to review scoring, returning dispute resolution prompts. */
-	startReviewScoring(args: string[]): string {
-		const gameId = args[0];
-		if (!gameId) {
-			return JSON.stringify({ error: "Usage: start-review-scoring <game_id>" });
-		}
-
-		const result = this.orchestrator.startReviewScoring(gameId);
-		return JSON.stringify(result, null, 2);
+	/**
+	 * Transitions to review scoring, returning dispute resolution prompts.
+	 *
+	 * @param gameId - Game identifier
+	 * @returns JSON scoring phase result
+	 */
+	startReviewScoring(gameId: string): string {
+		return JSON.stringify(
+			this.orchestrator.startReviewScoring(gameId),
+			null,
+			2,
+		);
 	}
 
-	/** Records a referee's resolution decision for a dispute. */
-	resolve(args: string[]): string {
-		const [gameId, disputeIdStr, verdict, explanation] = args;
-
-		if (!gameId || !disputeIdStr || !verdict || !explanation) {
-			return JSON.stringify({
-				error:
-					"Usage: resolve <game_id> <dispute_id> <SUCCESSFUL|FAILED> <explanation>",
-			});
-		}
-
+	/**
+	 * Records a referee's resolution decision for a dispute.
+	 *
+	 * @param gameId - Game identifier
+	 * @param disputeIdStr - Dispute ID as string
+	 * @param verdict - SUCCESSFUL | FAILED
+	 * @param explanation - Referee explanation
+	 * @returns JSON resolution result
+	 */
+	resolve(
+		gameId: string,
+		disputeIdStr: string,
+		verdict: string,
+		explanation: string,
+	): string {
 		const disputeId = parseInt(disputeIdStr, 10);
 		if (Number.isNaN(disputeId)) {
 			return JSON.stringify({ error: "dispute_id must be a valid integer" });
@@ -600,9 +495,7 @@ export class Commands {
 
 		const normalizedVerdict = verdict.toUpperCase();
 		if (!["SUCCESSFUL", "FAILED"].includes(normalizedVerdict)) {
-			return JSON.stringify({
-				error: "verdict must be SUCCESSFUL or FAILED",
-			});
+			return JSON.stringify({ error: "verdict must be SUCCESSFUL or FAILED" });
 		}
 
 		this.orchestrator.resolveDispute(
@@ -619,43 +512,37 @@ export class Commands {
 		});
 	}
 
-	/** Checks if any agent has reached the target score and returns game outcome. */
-	checkWinner(args: string[]): string {
-		const gameId = args[0];
-		if (!gameId) {
-			return JSON.stringify({ error: "Usage: check-winner <game_id>" });
-		}
-
-		const result = this.orchestrator.checkWinner(gameId);
-		return JSON.stringify(result, null, 2);
+	/**
+	 * Checks if any agent has reached the target score.
+	 *
+	 * @param gameId - Game identifier
+	 * @returns JSON winner check result
+	 */
+	checkWinner(gameId: string): string {
+		return JSON.stringify(this.orchestrator.checkWinner(gameId), null, 2);
 	}
 
-	/** Submits a new finding from an agent during the hunt phase. */
-	submit(args: string[]): string {
-		const [
-			gameId,
-			agentId,
-			filePath,
-			lineStartStr,
-			lineEndStr,
-			description,
-			codeSnippet,
-		] = args;
-
-		if (
-			!gameId ||
-			!agentId ||
-			!filePath ||
-			!lineStartStr ||
-			!lineEndStr ||
-			!description
-		) {
-			return JSON.stringify({
-				error:
-					"Usage: submit <game_id> <agent_id> <file_path> <line_start> <line_end> <description> [code_snippet]",
-			});
-		}
-
+	/**
+	 * Submits a new finding from an agent during the hunt phase.
+	 *
+	 * @param gameId - Game identifier
+	 * @param agentId - Submitting agent ID
+	 * @param filePath - File containing the issue
+	 * @param lineStartStr - Start line as string
+	 * @param lineEndStr - End line as string
+	 * @param description - Finding description
+	 * @param codeSnippet - Optional code snippet
+	 * @returns JSON with finding ID
+	 */
+	submit(
+		gameId: string,
+		agentId: string,
+		filePath: string,
+		lineStartStr: string,
+		lineEndStr: string,
+		description: string,
+		codeSnippet?: string,
+	): string {
 		const lineStart = parseInt(lineStartStr, 10);
 		const lineEnd = parseInt(lineEndStr, 10);
 
@@ -685,16 +572,21 @@ export class Commands {
 		return JSON.stringify({ success: true, findingId });
 	}
 
-	/** Submits a dispute from an agent challenging another agent's finding. */
-	dispute(args: string[]): string {
-		const [gameId, agentId, findingIdStr, reason] = args;
-
-		if (!gameId || !agentId || !findingIdStr || !reason) {
-			return JSON.stringify({
-				error: "Usage: dispute <game_id> <agent_id> <finding_id> <reason>",
-			});
-		}
-
+	/**
+	 * Submits a dispute from an agent challenging another agent's finding.
+	 *
+	 * @param gameId - Game identifier
+	 * @param agentId - Disputing agent ID
+	 * @param findingIdStr - Finding ID as string
+	 * @param reason - Dispute reason
+	 * @returns JSON with dispute ID
+	 */
+	dispute(
+		gameId: string,
+		agentId: string,
+		findingIdStr: string,
+		reason: string,
+	): string {
 		const findingId = parseInt(findingIdStr, 10);
 		if (Number.isNaN(findingId)) {
 			return JSON.stringify({ error: "finding_id must be a valid integer" });
@@ -706,36 +598,32 @@ export class Commands {
 			findingId,
 			reason,
 		);
-
 		return JSON.stringify({ success: true, disputeId });
 	}
 
-	/** Marks an agent as finished with the current phase (hunt or review). */
-	done(args: string[]): string {
-		const [gameId, agentId, phase] = args;
-
-		if (
-			!gameId ||
-			!agentId ||
-			!phase ||
-			(phase !== "hunt" && phase !== "review")
-		) {
-			return JSON.stringify({
-				error: "Usage: done <game_id> <agent_id> <hunt|review>",
-			});
+	/**
+	 * Marks an agent as finished with the current phase.
+	 *
+	 * @param gameId - Game identifier
+	 * @param agentId - Agent ID
+	 * @param phase - "hunt" or "review"
+	 * @returns JSON confirmation
+	 */
+	done(gameId: string, agentId: string, phase: string): string {
+		if (phase !== "hunt" && phase !== "review") {
+			return JSON.stringify({ error: "phase must be 'hunt' or 'review'" });
 		}
-
 		this.orchestrator.markAgentDone(gameId, agentId, phase);
 		return JSON.stringify({ success: true, agentId, phase });
 	}
 
-	/** Returns current game state including phase, round, timer, and scoreboard. */
-	status(args: string[]): string {
-		const gameId = args[0];
-		if (!gameId) {
-			return JSON.stringify({ error: "Usage: status <game_id>" });
-		}
-
+	/**
+	 * Returns current game state including phase, round, timer, and scoreboard.
+	 *
+	 * @param gameId - Game identifier
+	 * @returns JSON game status
+	 */
+	status(gameId: string): string {
 		const game = this.orchestrator.getGame(gameId);
 		if (!game) {
 			return JSON.stringify({ error: `Game not found: ${gameId}` });
@@ -760,13 +648,13 @@ export class Commands {
 		);
 	}
 
-	/** Lists all findings for a game with summary info (status, points, truncated description). */
-	findings(args: string[]): string {
-		const gameId = args[0];
-		if (!gameId) {
-			return JSON.stringify({ error: "Usage: findings <game_id>" });
-		}
-
+	/**
+	 * Lists all findings for a game with summary info.
+	 *
+	 * @param gameId - Game identifier
+	 * @returns JSON findings list
+	 */
+	findings(gameId: string): string {
 		const findings = this.orchestrator.getFindings(gameId);
 		return JSON.stringify(
 			findings.map((f) => ({
@@ -786,13 +674,13 @@ export class Commands {
 		);
 	}
 
-	/** Lists all disputes for a game with resolution status and points. */
-	disputes(args: string[]): string {
-		const gameId = args[0];
-		if (!gameId) {
-			return JSON.stringify({ error: "Usage: disputes <game_id>" });
-		}
-
+	/**
+	 * Lists all disputes for a game with resolution status and points.
+	 *
+	 * @param gameId - Game identifier
+	 * @returns JSON disputes list
+	 */
+	disputes(gameId: string): string {
 		const disputes = this.orchestrator.getDisputes(gameId);
 		return JSON.stringify(
 			disputes.map((d) => ({
@@ -809,30 +697,28 @@ export class Commands {
 		);
 	}
 
-	/** Exports game results to logs directory (markdown + JSON reports). */
-	export(args: string[]): string {
-		const gameId = args[0];
-		if (!gameId) {
-			return JSON.stringify({ error: "Usage: export <game_id>" });
-		}
-
-		const result = this.orchestrator.exportGame(gameId);
-		return JSON.stringify(result, null, 2);
+	/**
+	 * Exports game results to logs directory (markdown + JSON reports).
+	 *
+	 * @param gameId - Game identifier
+	 * @returns JSON export result
+	 */
+	export(gameId: string): string {
+		return JSON.stringify(this.orchestrator.exportGame(gameId), null, 2);
 	}
 
-	/** Launches interactive terminal UI for real-time game monitoring. */
-	async ui(args: string[]): Promise<string> {
-		const gameId = args[0];
-		if (!gameId) {
-			return JSON.stringify({ error: "Usage: ui <game_id>" });
-		}
-
+	/**
+	 * Launches interactive terminal UI for real-time game monitoring.
+	 *
+	 * @param gameId - Game identifier
+	 * @returns JSON exit status
+	 */
+	async ui(gameId: string): Promise<string> {
 		const game = this.orchestrator.getGame(gameId);
 		if (!game) {
 			return JSON.stringify({ error: `Game not found: ${gameId}` });
 		}
 
-		// Dynamic import to avoid loading ink/react unless needed
 		const { render } = await import("ink");
 		const React = await import("react");
 		const { GameUI } = await import("./ui/GameUI.js");
@@ -850,97 +736,27 @@ export class Commands {
 
 	/**
 	 * Runs a fully autonomous game. Spawns LLM agents for all roles.
-	 * Uses pi-agent-core for agent loops and pi-ai for model resolution.
 	 *
-	 * @param args - CLI arguments: <project_url> [options]
+	 * @param projectPath - Path to the project to review
+	 * @param opts - Parsed commander options
 	 * @returns JSON summary when game completes
 	 */
-	async play(args: string[]): Promise<string> {
-		const projectUrl = args[0];
-		if (!projectUrl) {
-			return JSON.stringify({
-				error: `Usage: play <project_path> [options]
-  --model <provider/model>      Agent model (default: anthropic/claude-sonnet-4-0)
-  --referee-model <provider/m>  Referee model (default: same as --model)
-  --category <type>             Hunt category
-  --target <score>              Target score (default: 10)
-  --agents <count>              Number of agents (default: 3)
-  --max-rounds <n>              Max rounds (default: 3)
-  --thinking <level>            Agent thinking: off|minimal|low|medium|high (default: medium)
-  --referee-thinking <level>    Referee thinking (default: high)`,
-			});
-		}
-
-		// Lazy import to avoid loading pi-ai unless play is used
+	async play(projectPath: string, opts: PlayOpts): Promise<string> {
 		const { getModel, registerBuiltInApiProviders } = await import(
 			"@mariozechner/pi-ai"
 		);
 		registerBuiltInApiProviders();
 
-		// Resolve project path
-		const projectPath = resolve(projectUrl);
-		if (!existsSync(projectPath)) {
+		const resolvedPath = resolve(projectPath);
+		if (!existsSync(resolvedPath)) {
 			return JSON.stringify({
-				error: `Project path not found: ${projectPath}`,
+				error: `Project path not found: ${resolvedPath}`,
 			});
 		}
 
-		// Parse play-specific options
-		let modelSpec = "anthropic/claude-sonnet-4-0";
-		let refereeModelSpec: string | undefined;
-		let agentThinking: string = "medium";
-		let refereeThinking: string = "high";
-		let useOAuth = false;
-
-		const setupArgs: string[] = [projectUrl];
-		let i = 1;
-		while (i < args.length) {
-			const flag = args[i];
-			const value = args[i + 1];
-
-			switch (flag) {
-				case "--model":
-					modelSpec = value;
-					i += 2;
-					break;
-				case "--referee-model":
-					refereeModelSpec = value;
-					i += 2;
-					break;
-				case "--thinking":
-					agentThinking = value;
-					i += 2;
-					break;
-				case "--referee-thinking":
-					refereeThinking = value;
-					i += 2;
-					break;
-				case "--auth":
-					if (value === "oauth") {
-						useOAuth = true;
-					} else {
-						return JSON.stringify({
-							error: `Invalid --auth value: ${value}. Use 'oauth' for subscription auth.`,
-						});
-					}
-					i += 2;
-					break;
-				default:
-					// Pass through to setup config parsing
-					setupArgs.push(flag);
-					if (value && !value.startsWith("--")) {
-						setupArgs.push(value);
-						i += 2;
-					} else {
-						i += 1;
-					}
-					break;
-			}
-		}
-
-		// Resolve OAuth API key if requested
+		// Auth
 		let oauthApiKey: string | undefined;
-		if (useOAuth) {
+		if (opts.auth === "oauth") {
 			const key = await getOAuthKey();
 			if (!key) {
 				return JSON.stringify({
@@ -953,21 +769,22 @@ export class Commands {
 		}
 
 		// Resolve models
+		const modelSpec = opts.model ?? "anthropic/claude-sonnet-4-0";
 		const [agentProvider, agentModelId] = modelSpec.split("/") as [
 			string,
 			string,
 		];
 		const agentModel = getModel(agentProvider as any, agentModelId as any);
 
-		const refereeModel = refereeModelSpec
+		const refereeModel = opts.refereeModel
 			? (() => {
-					const [p, m] = refereeModelSpec!.split("/") as [string, string];
+					const [p, m] = opts.refereeModel!.split("/") as [string, string];
 					return getModel(p as any, m as any);
 				})()
 			: agentModel;
 
-		// Parse setup config from remaining args
-		const config = this.parseSetupConfig(setupArgs);
+		// Build setup config from shared opts
+		const config = this.buildSetupConfig(projectPath, opts);
 		if ("error" in config) {
 			return JSON.stringify(config);
 		}
@@ -976,13 +793,12 @@ export class Commands {
 			...config,
 			agentModel,
 			refereeModel,
-			agentThinking: agentThinking as any,
-			refereeThinking: refereeThinking as any,
+			agentThinking: (opts.thinking ?? "medium") as any,
+			refereeThinking: (opts.refereeThinking ?? "high") as any,
 			apiKey: oauthApiKey,
 		};
 
-		// Run the game
-		const runner = new GameRunner(this.orchestrator, projectPath);
+		const runner = new GameRunner(this.orchestrator, resolvedPath);
 
 		for await (const event of runner.play(playConfig)) {
 			this.logGameEvent(event);
@@ -1007,67 +823,129 @@ export class Commands {
 	}
 
 	/**
-	 * Parses setup config from CLI args without the --web flag.
-	 * Extracted for reuse between setup() and play().
+	 * Initializes the project by installing dependencies for all components.
 	 *
-	 * @param args - CLI arguments starting with project URL
+	 * @returns JSON init result
+	 */
+	init(): string {
+		const projectRoot = join(__dirname, "..", "..");
+		const dashboardDir = join(projectRoot, "apps", "dashboard");
+		const results: { step: string; success: boolean; message?: string }[] = [];
+
+		const bunCheck = spawnSync("bun", ["--version"], { encoding: "utf-8" });
+		if (bunCheck.status !== 0) {
+			return JSON.stringify({
+				error: "bun is required but not found. Install from https://bun.sh",
+			});
+		}
+
+		const rootNodeModules = join(projectRoot, "node_modules");
+		if (!existsSync(rootNodeModules)) {
+			console.log("Installing root dependencies...");
+			try {
+				execSync("bun install", { cwd: projectRoot, stdio: "inherit" });
+				results.push({ step: "root dependencies", success: true });
+			} catch {
+				results.push({
+					step: "root dependencies",
+					success: false,
+					message: "bun install failed",
+				});
+			}
+		} else {
+			results.push({
+				step: "root dependencies",
+				success: true,
+				message: "already installed",
+			});
+		}
+
+		const dashboardNodeModules = join(dashboardDir, "node_modules");
+		if (!existsSync(dashboardNodeModules)) {
+			console.log("Installing dashboard dependencies...");
+			try {
+				execSync("bun install", { cwd: dashboardDir, stdio: "inherit" });
+				results.push({ step: "dashboard dependencies", success: true });
+			} catch {
+				results.push({
+					step: "dashboard dependencies",
+					success: false,
+					message: "bun install failed in apps/dashboard",
+				});
+			}
+		} else {
+			results.push({
+				step: "dashboard dependencies",
+				success: true,
+				message: "already installed",
+			});
+		}
+
+		console.log("Building TypeScript...");
+		try {
+			execSync("bun run build", { cwd: projectRoot, stdio: "inherit" });
+			results.push({ step: "typescript build", success: true });
+		} catch {
+			results.push({
+				step: "typescript build",
+				success: false,
+				message: "build failed",
+			});
+		}
+
+		const allSuccess = results.every((r) => r.success);
+		return JSON.stringify(
+			{
+				success: allSuccess,
+				results,
+				message: allSuccess
+					? "Initialization complete. You can now use --web flag."
+					: "Some steps failed. Check errors above.",
+			},
+			null,
+			2,
+		);
+	}
+
+	/**
+	 * Builds a SetupConfig from commander-parsed options.
+	 * Shared between setup() and play().
+	 *
+	 * @param projectUrl - Project URL or path
+	 * @param opts - Parsed commander options
 	 * @returns SetupConfig or error object
 	 */
-	private parseSetupConfig(args: string[]): SetupConfig | { error: string } {
-		const projectUrl = args[0];
-		if (!projectUrl) {
-			return { error: "Missing project URL" };
-		}
-
+	private buildSetupConfig(
+		projectUrl: string,
+		opts: SetupOpts,
+	): SetupConfig | { error: string } {
 		const config: SetupConfig = { projectUrl };
-		let i = 1;
-		while (i < args.length) {
-			const flag = args[i];
-			const value = args[i + 1];
 
-			if (value === undefined) {
-				return { error: `Missing value for flag: ${flag}` };
+		if (opts.prompt) {
+			// Legacy --prompt maps to custom category
+			config.category = HuntCategory.Custom;
+			config.userPrompt = opts.prompt;
+		} else {
+			if (opts.category) {
+				if (!VALID_CATEGORIES.includes(opts.category as HuntCategory)) {
+					return {
+						error: `Invalid category: ${opts.category}. Valid: ${VALID_CATEGORIES.join(", ")}`,
+					};
+				}
+				config.category = opts.category as HuntCategory;
 			}
-
-			switch (flag) {
-				case "--category":
-				case "-c":
-					if (!VALID_CATEGORIES.includes(value as HuntCategory)) {
-						return {
-							error: `Invalid category: ${value}. Valid: ${VALID_CATEGORIES.join(", ")}`,
-						};
-					}
-					config.category = value as HuntCategory;
-					break;
-				case "--focus":
-				case "-f":
-					config.userPrompt = value;
-					break;
-				case "--target":
-				case "-t":
-					config.targetScore = parseInt(value, 10);
-					break;
-				case "--agents":
-				case "-a":
-					config.numAgents = parseInt(value, 10);
-					break;
-				case "--max-rounds":
-				case "-m":
-					config.maxRounds = parseInt(value, 10);
-					break;
-				case "--hunt-duration":
-				case "-h":
-					config.huntDuration = parseInt(value, 10);
-					break;
-				case "--review-duration":
-				case "-r":
-					config.reviewDuration = parseInt(value, 10);
-					break;
-				default:
-					return { error: `Unknown flag: ${flag}` };
+			if (opts.focus) {
+				config.userPrompt = opts.focus;
 			}
-			i += 2;
 		}
+
+		if (opts.target) config.targetScore = parseInt(opts.target, 10);
+		if (opts.agents) config.numAgents = parseInt(opts.agents, 10);
+		if (opts.maxRounds) config.maxRounds = parseInt(opts.maxRounds, 10);
+		if (opts.huntDuration)
+			config.huntDuration = parseInt(opts.huntDuration, 10);
+		if (opts.reviewDuration)
+			config.reviewDuration = parseInt(opts.reviewDuration, 10);
 
 		return config;
 	}
@@ -1154,94 +1032,5 @@ export class Commands {
 				);
 				break;
 		}
-	}
-
-	/**
-	 * Initializes the project by installing dependencies for all components.
-	 * Required before using --web flag or running the dashboard.
-	 */
-	init(): string {
-		const projectRoot = join(__dirname, "..", "..");
-		const dashboardDir = join(projectRoot, "apps", "dashboard");
-		const results: { step: string; success: boolean; message?: string }[] = [];
-
-		// Check pnpm is available
-		const pnpmCheck = spawnSync("pnpm", ["--version"], { encoding: "utf-8" });
-		if (pnpmCheck.status !== 0) {
-			return JSON.stringify({
-				error:
-					"pnpm is required but not found. Install with: npm install -g pnpm",
-			});
-		}
-
-		// Install root dependencies if node_modules missing
-		const rootNodeModules = join(projectRoot, "node_modules");
-		if (!existsSync(rootNodeModules)) {
-			console.log("Installing root dependencies...");
-			try {
-				execSync("pnpm install", { cwd: projectRoot, stdio: "inherit" });
-				results.push({ step: "root dependencies", success: true });
-			} catch {
-				results.push({
-					step: "root dependencies",
-					success: false,
-					message: "pnpm install failed",
-				});
-			}
-		} else {
-			results.push({
-				step: "root dependencies",
-				success: true,
-				message: "already installed",
-			});
-		}
-
-		// Install dashboard dependencies
-		const dashboardNodeModules = join(dashboardDir, "node_modules");
-		if (!existsSync(dashboardNodeModules)) {
-			console.log("Installing dashboard dependencies...");
-			try {
-				execSync("pnpm install", { cwd: dashboardDir, stdio: "inherit" });
-				results.push({ step: "dashboard dependencies", success: true });
-			} catch {
-				results.push({
-					step: "dashboard dependencies",
-					success: false,
-					message: "pnpm install failed in apps/dashboard",
-				});
-			}
-		} else {
-			results.push({
-				step: "dashboard dependencies",
-				success: true,
-				message: "already installed",
-			});
-		}
-
-		// Build TypeScript
-		console.log("Building TypeScript...");
-		try {
-			execSync("pnpm build", { cwd: projectRoot, stdio: "inherit" });
-			results.push({ step: "typescript build", success: true });
-		} catch {
-			results.push({
-				step: "typescript build",
-				success: false,
-				message: "pnpm build failed",
-			});
-		}
-
-		const allSuccess = results.every((r) => r.success);
-		return JSON.stringify(
-			{
-				success: allSuccess,
-				results,
-				message: allSuccess
-					? "Initialization complete. You can now use --web flag."
-					: "Some steps failed. Check errors above.",
-			},
-			null,
-			2,
-		);
 	}
 }
