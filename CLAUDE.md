@@ -6,26 +6,34 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # First-time setup (installs all deps including dashboard)
-node dist/index.js init
+bun src/cli.ts init
 
 # Development
-pnpm dev                    # Run CLI with tsx (no build needed)
-pnpm build                  # Compile TypeScript to dist/
-pnpm serve                  # Run API server with tsx
+bun run dev                 # Run CLI with bun (no build needed)
+bun run build               # Compile TypeScript to dist/
+bun run serve               # Run API server with bun
 
 # Testing
-pnpm test                   # Run all tests
-pnpm test:watch             # Watch mode
-pnpm vitest src/domain/Finding.test.ts  # Single test file
+bun test                    # Run all tests
+bun test --watch            # Watch mode
+bun test src/domain/Finding.test.ts  # Single test file
 
 # Lint/Format
-pnpm lint                   # Check with Biome
-pnpm lint:fix               # Auto-fix
+bun run lint                # Check with Biome
+bun run lint:fix            # Auto-fix
 ```
 
 ## Architecture
 
 Bones is a competitive multi-agent code review game. Agents hunt for issues (bugs, security, doc drift, etc.), then review each other's findings. A referee validates findings and resolves disputes.
+
+### Runtime & Toolchain
+
+- **Runtime**: Bun (test runner, SQLite via `bun:sqlite`, server via `Bun.serve`)
+- **CLI**: Commander (subcommands with typed options)
+- **Database**: `bun:sqlite` (zero-dep, native SQLite)
+- **API server**: Hono (Bun-native, no `@hono/node-server`)
+- **Tests**: `bun:test` (describe/it/expect)
 
 ### Game Flow State Machine
 
@@ -53,7 +61,7 @@ Setup → Hunt → HuntScoring → Review → ReviewScoring → (loop or Complet
 - `Dispute`: Challenge to a finding
 - `Agent`: Score tracking, phase completion flags
 
-**Repositories** (`src/repository/`): SQLite persistence via better-sqlite3. Each domain model has a corresponding repository.
+**Repositories** (`src/repository/`): SQLite persistence via `bun:sqlite`. Each domain model has a corresponding repository.
 
 ### Scoring
 
@@ -86,7 +94,7 @@ Low-confidence validations can trigger a second-pass verification agent:
 
 ### Entry Points
 
-- **CLI**: `src/index.ts` → `src/cli/commands.ts` → Orchestrator
+- **CLI**: `src/cli.ts` (commander) → `src/cli/commands.ts` → Orchestrator
 - **API**: `src/server.ts` (Hono, port 8019) for dashboard
 - **Dashboard**: `apps/dashboard/` (Next.js, port 3019)
 
