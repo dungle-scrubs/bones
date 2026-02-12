@@ -34,10 +34,10 @@ export const DEFAULT_THINKING: Record<string, ThinkingLevel> = {
 
 /** Default max turns per role. Prevents runaway agents. */
 export const DEFAULT_MAX_TURNS: Record<string, number> = {
-	hunt: 20,
-	review: 10,
-	referee: 5,
-	verifier: 3,
+	hunt: 30,
+	review: 15,
+	referee: 10,
+	verifier: 5,
 };
 
 /**
