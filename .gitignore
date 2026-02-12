@@ -6,4 +6,7 @@ logs/
 .words_hurt/
 .DS_Store
 .tallow/
+.claude/
 PLAN.md
+CLAUDE.md
+AGENTS.md
