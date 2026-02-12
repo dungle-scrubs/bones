@@ -754,18 +754,26 @@ export class Commands {
 			});
 		}
 
-		// Auth
+		// Auth: explicit --auth oauth, or auto-detect if logged in and no ANTHROPIC_API_KEY
 		let oauthApiKey: string | undefined;
-		if (opts.auth === "oauth") {
+		const hasEnvKey = !!process.env.ANTHROPIC_API_KEY;
+		const useOAuth = opts.auth === "oauth" || (!hasEnvKey && isLoggedIn());
+
+		if (useOAuth) {
 			const key = await getOAuthKey();
 			if (!key) {
 				return JSON.stringify({
 					error:
-						"Not logged in. Run 'bones login' first to authenticate with Claude Pro/Max.",
+						"Not logged in. Run 'bones login' first, or set ANTHROPIC_API_KEY.",
 				});
 			}
 			oauthApiKey = key;
 			console.log("[auth]    Using Claude Pro/Max subscription (OAuth)");
+		} else if (!hasEnvKey) {
+			return JSON.stringify({
+				error:
+					"No auth configured. Run 'bones login' or set ANTHROPIC_API_KEY.",
+			});
 		}
 
 		// Resolve models

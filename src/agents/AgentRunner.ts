@@ -98,6 +98,9 @@ export async function runAgent(
 
 			// Accumulate usage from assistant message
 			const msg = event.message;
+			if ("role" in msg && msg.role === "assistant" && (msg as any).errorMessage) {
+				console.error(`[${agentId}] LLM error: ${(msg as any).errorMessage}`);
+			}
 			if ("role" in msg && msg.role === "assistant") {
 				const u = msg.usage;
 				totalUsage.input += u.input;

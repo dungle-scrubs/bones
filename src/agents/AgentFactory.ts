@@ -10,6 +10,7 @@ import type {
 } from "@mariozechner/pi-agent-core";
 import { Agent } from "@mariozechner/pi-agent-core";
 import type { Api, Message, Model } from "@mariozechner/pi-ai";
+import { withClaudeCodeShims } from "./tools/claude-code-shim.js";
 
 /** Role-specific configuration for agent creation. */
 export interface AgentRoleConfig {
@@ -60,12 +61,17 @@ function defaultConvertToLlm(messages: AgentMessage[]): Message[] {
  * @returns Configured pi-agent-core Agent ready for prompting
  */
 export function createAgent(config: AgentRoleConfig): Agent {
+	// When using OAuth, add Claude Code shim tools so the request
+	// passes Anthropic's server-side tool set validation.
+	const tools = config.apiKey
+		? withClaudeCodeShims(config.tools)
+		: config.tools;
 	const agent = new Agent({
 		initialState: {
 			systemPrompt: config.systemPrompt,
 			model: config.model,
 			thinkingLevel: config.thinkingLevel,
-			tools: config.tools,
+			tools,
 		},
 		convertToLlm: defaultConvertToLlm,
 		// Inject OAuth key if provided — bypasses ANTHROPIC_API_KEY env var
