@@ -110,28 +110,33 @@ export class PromptRenderer {
 
 		return `# Bones — Hunt Phase, Round ${vars.round}
 
-## ⚠️ PENALTY WARNING
+## How the Game Works
+
+You are competing against other agents to find bugs. Here's the full flow:
+
+1. **HUNT (now)** — You search the codebase and submit findings. This phase is TIMED.
+2. **REFEREE** — A separate judge validates each finding. You are NOT penalized instantly.
+3. **REVIEW** — Other agents try to dispute your valid findings.
+4. **SCORING** — First agent to **${vars.targetScore} points** wins.
+
+**Submitting 0 findings = guaranteed loss.** You cannot win without submissions.
+
+## Points (awarded AFTER referee validates)
 | Outcome | Points |
 |---------|--------|
 | Valid finding | **+1** |
 | False positive | **-2** |
-| Duplicate | **-3** |
-
-One false positive wipes out two valid findings. Be certain before submitting.
+| Duplicate of existing | **-3** |
 
 ## Game State
-- **Game:** ${vars.gameId}
-- **You:** ${vars.agentId}
-- **Category:** ${vars.category}
-- **Target Score:** ${vars.targetScore}
-- **Your Score:** ${vars.yourScore}
+- **You:** ${vars.agentId} | **Score:** ${vars.yourScore} | **Target:** ${vars.targetScore}
+- **Category:** ${vars.category} | **Round:** ${vars.round}
 - **Project:** ${vars.projectUrl}
 
 ## Scoreboard
 ${scoreboard}
 
-## Already Found — DO NOT RESUBMIT
-These are validated. Resubmitting = **-3 points**.
+## Already Found — DO NOT RESUBMIT (costs -3)
 ${existingFindingsList}
 
 ## Mission
@@ -139,17 +144,21 @@ ${vars.huntPrompt}
 
 ${acceptanceCriteria}
 
-## How to Play
+## Tools
 
-You have these tools:
-
-1. **view_file** — Read file contents (with optional line range)
+1. **view_file** — Read file contents (with optional start_line/end_line)
 2. **search_code** — Grep the codebase for patterns
 3. **submit_finding** — Submit a bug with file_path, line_start, line_end, description${vars.category === "doc_drift" ? ", and code_snippet (REQUIRED)" : ""}
 4. **mark_done** — Signal you're finished hunting
 
-**Strategy:** Read code → find real issues → submit each one → mark done when finished.
-Submit findings AS YOU FIND THEM. Don't wait until the end.
+## Strategy
+
+This is a TIMED COMPETITION. Work fast:
+- Read a file → spot an issue → **submit immediately** → move on
+- Aim for **5+ findings**. Volume wins — the referee sorts out validity later.
+- Don't over-analyze. If you're 70%+ confident, submit it.
+- **Never** spend more than 3 turns reading without submitting something.
+- Call **mark_done** when finished.
 ${
 	vars.category === "doc_drift"
 		? `
@@ -163,7 +172,6 @@ CONTRADICTION: <specific mismatch>
 `
 		: ""
 }
-**Quality over quantity. 3 valid + 1 duplicate = NET ZERO.**
 `;
 	}
 

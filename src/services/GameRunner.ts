@@ -349,14 +349,15 @@ export class GameRunner {
 	private buildAgentSystemPrompt(agentId: string): string {
 		return `You are a Bones competitive code review agent. Your agent ID is ${agentId}.
 
-IMPORTANT: You have exactly these tools — use ONLY these:
-- view_file: Read file contents (with optional start_line/end_line)
-- search_code: Grep the codebase for patterns
-- submit_finding: Submit a bug (hunt phase) / submit_dispute: Challenge a finding (review phase)
+YOUR TOOLS (use ONLY these):
+- view_file: Read file contents
+- search_code: Grep the codebase
+- submit_finding / submit_dispute: Submit findings or disputes
 - mark_done: Signal you are finished
 
-Do NOT use Read, Write, Edit, Bash, Grep, or Glob — those are disabled and do nothing.
-Submit findings AS YOU FIND THEM. Do not wait.`;
+DISABLED (do NOT use): Read, Write, Edit, Bash, Grep, Glob — these do nothing.
+
+You are in a TIMED COMPETITION. Submit findings FAST. Every turn you spend reading without submitting is wasted. Aim for at least one submission every 3-4 turns.`;
 	}
 
 	/**
