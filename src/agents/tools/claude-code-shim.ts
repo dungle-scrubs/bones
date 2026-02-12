@@ -1,28 +1,35 @@
 /**
- * No-op Claude Code tools for OAuth subscription compatibility.
+ * Claude Code tool shims for OAuth subscription compatibility.
  *
  * When using OAuth (sk-ant-oat) tokens, Anthropic validates that requests
- * include Claude Code's core tool set. These shims satisfy that check.
- * Only tools NOT already provided by the agent's real tool set are added.
+ * include Claude Code's core tool set. These shims satisfy that check
+ * and redirect the model to use the agent's real tools.
  */
 
 import type { AgentTool } from "@mariozechner/pi-agent-core";
 import { Type } from "@sinclair/typebox";
 
-/** Creates a no-op tool that returns a "not available" message. */
-function noop(
+/**
+ * Creates a shim tool that tells the model to use the correct tool instead.
+ *
+ * @param name - CC tool name (lowercase, remapped to PascalCase by pi-ai)
+ * @param label - Display label
+ * @param redirect - Message telling the model which real tool to use
+ */
+function shim(
 	name: string,
 	label: string,
-	description: string,
+	redirect: string,
 ): AgentTool {
 	return {
 		name,
 		label,
-		description,
+		// Description steers the model away from using this tool
+		description: `[DISABLED] ${redirect}`,
 		parameters: Type.Object({}),
 		async execute() {
 			return {
-				content: [{ type: "text" as const, text: `${label} is not available in this environment.` }],
+				content: [{ type: "text" as const, text: redirect }],
 				details: {},
 			};
 		},
@@ -31,12 +38,12 @@ function noop(
 
 /** Claude Code core tools that must appear in OAuth requests. */
 const SHIM_TOOLS: AgentTool[] = [
-	noop("read", "Read", "Read file contents"),
-	noop("write", "Write", "Write file contents"),
-	noop("edit", "Edit", "Edit file contents"),
-	noop("bash", "Bash", "Run shell commands"),
-	noop("grep", "Grep", "Search with grep"),
-	noop("glob", "Glob", "Find files by pattern"),
+	shim("read", "Read", "Do not use this tool. Use view_file instead to read files."),
+	shim("write", "Write", "Do not use this tool. Writing files is not available."),
+	shim("edit", "Edit", "Do not use this tool. Editing files is not available."),
+	shim("bash", "Bash", "Do not use this tool. Use search_code to search the codebase and view_file to read files."),
+	shim("grep", "Grep", "Do not use this tool. Use search_code instead to search."),
+	shim("glob", "Glob", "Do not use this tool. Use search_code instead to find files."),
 ];
 
 /**

@@ -17,8 +17,10 @@ export function useGame(gameId: string) {
 	const eventSourceRef = useRef<EventSource | null>(null);
 	const sseFailedRef = useRef(false);
 
-	// Set up SSE connection
+	// Set up SSE connection (client-side only)
 	useEffect(() => {
+		if (typeof window === "undefined") return;
+
 		// Reset SSE failure state when gameId changes
 		sseFailedRef.current = false;
 
@@ -55,7 +57,10 @@ export function useGame(gameId: string) {
 		// Only poll if SSE is not connected
 		refetchInterval: (query) => {
 			// If SSE is connected and working, don't poll
-			if (eventSourceRef.current?.readyState === EventSource.OPEN) {
+			if (
+				typeof EventSource !== "undefined" &&
+				eventSourceRef.current?.readyState === EventSource.OPEN
+			) {
 				return false;
 			}
 
