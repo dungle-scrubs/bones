@@ -79,6 +79,9 @@ export class Game {
 	 */
 	canTransitionTo(phase: Phase): boolean {
 		const nextPhase = PHASE_TRANSITIONS[this._phase];
+		if (nextPhase === undefined) {
+			throw new Error(`Unknown current phase: ${this._phase}`);
+		}
 		if (nextPhase === phase) return true;
 		// Special case: ReviewScoring can go to Complete
 		if (this._phase === Phase.ReviewScoring && phase === Phase.Complete)

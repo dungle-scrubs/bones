@@ -63,8 +63,13 @@ export class FindingRepository {
 			return insertResult;
 		});
 
+		const id = Number(result.lastInsertRowid);
+		if (!Number.isFinite(id) || id <= 0) {
+			throw new Error(`Failed to insert finding: invalid lastInsertRowid ${result.lastInsertRowid}`);
+		}
+
 		return Finding.create(
-			Number(result.lastInsertRowid),
+			id,
 			input.gameId,
 			input.roundNumber,
 			input.agentId,

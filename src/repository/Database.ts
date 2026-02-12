@@ -152,11 +152,16 @@ export class Database {
 		// Migration: rename bug_category to issue_type, add impact_tier and rejection_reason
 		try {
 			this.db.exec("ALTER TABLE findings ADD COLUMN issue_type TEXT");
+		} catch {
+			// Column already exists
+		}
+		// Data migration — only runs if legacy bug_category column exists
+		try {
 			this.db.exec(
 				"UPDATE findings SET issue_type = bug_category WHERE issue_type IS NULL AND bug_category IS NOT NULL",
 			);
 		} catch {
-			// Column already exists
+			// bug_category column doesn't exist on fresh DBs — safe to skip
 		}
 		try {
 			this.db.exec("ALTER TABLE findings ADD COLUMN impact_tier TEXT");
@@ -190,6 +195,11 @@ export class Database {
 		}
 		try {
 			this.db.exec("ALTER TABLE games ADD COLUMN user_prompt TEXT");
+		} catch {
+			// Column already exists
+		}
+		// Data migration — only runs if legacy hunt_prompt column exists
+		try {
 			this.db.exec(
 				"UPDATE games SET user_prompt = hunt_prompt WHERE user_prompt IS NULL AND hunt_prompt IS NOT NULL",
 			);

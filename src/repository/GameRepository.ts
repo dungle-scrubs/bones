@@ -32,7 +32,7 @@ function extractProjectName(projectUrl: string): string {
  */
 function generateGameId(projectUrl: string): string {
 	const projectName = extractProjectName(projectUrl);
-	const shortId = randomBytes(3).toString("hex"); // 6 chars
+	const shortId = randomBytes(6).toString("hex"); // 12 chars, ~281 trillion possibilities
 	return `${projectName}-${shortId}`;
 }
 

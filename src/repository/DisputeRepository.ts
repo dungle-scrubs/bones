@@ -40,8 +40,13 @@ export class DisputeRepository {
 			now,
 		);
 
+		const id = Number(result.lastInsertRowid);
+		if (!Number.isFinite(id) || id <= 0) {
+			throw new Error(`Failed to insert dispute: invalid lastInsertRowid ${result.lastInsertRowid}`);
+		}
+
 		return Dispute.create(
-			Number(result.lastInsertRowid),
+			id,
 			input.gameId,
 			input.roundNumber,
 			input.findingId,

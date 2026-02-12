@@ -273,6 +273,7 @@ export class Finding {
 		const totalLines = Math.max(
 			this.lineEnd - this.lineStart + 1,
 			other.lineEnd - other.lineStart + 1,
+			1, // Guard against zero when lineStart > lineEnd
 		);
 		const lineOverlap = overlapLines / totalLines;
 
