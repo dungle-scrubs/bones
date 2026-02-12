@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { Game } from "./Game.js";
 import { type GameConfig, HuntCategory, Phase } from "./types.js";
 

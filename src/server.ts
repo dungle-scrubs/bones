@@ -1,4 +1,5 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
+
 /**
  * Bones API Server
  *
@@ -10,14 +11,12 @@
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { Orchestrator } from "./services/Orchestrator.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Use ~/.bones/ for shared DB across dev/cache
 const dataDir = process.env.BONES_DATA_DIR ?? join(homedir(), ".bones");
 const dbPath = join(dataDir, "game.db");
 const scriptsPath =
@@ -63,7 +62,6 @@ app.get("/api/games/:id", (c) => {
 	const findings = orchestrator.getFindings(gameId);
 	const disputes = orchestrator.getDisputes(gameId);
 
-	// Compute stats
 	const stats = {
 		totalFindings: findings.length,
 		validFindings: findings.filter((f) => f.status === "valid").length,
@@ -175,13 +173,11 @@ app.get("/api/games/:id/events", async (c) => {
 					);
 				};
 
-				// Send initial state
 				const sendState = () => {
 					if (closed) return;
 
 					const currentGame = orchestrator.getGame(gameId);
 					if (!currentGame) {
-						// Game was deleted - clean up interval before closing
 						if (interval) {
 							clearInterval(interval);
 							interval = null;
@@ -226,13 +222,9 @@ app.get("/api/games/:id/events", async (c) => {
 					});
 				};
 
-				// Send initial state immediately
 				sendState();
-
-				// Poll and send updates
 				interval = setInterval(sendState, 1000);
 
-				// Clean up on close
 				c.req.raw.signal.addEventListener("abort", () => {
 					if (interval) {
 						clearInterval(interval);
@@ -264,14 +256,13 @@ console.log(`    GET /api/games/:id/findings - All findings`);
 console.log(`    GET /api/games/:id/disputes - All disputes`);
 console.log(`    GET /health                 - Health check`);
 
-/** Gracefully closes database connection on shutdown signals. */
-const shutdown = () => {
-	console.log("\nShutting down...");
+/** Closes database connection on process exit. */
+process.on("beforeExit", () => {
 	orchestrator.close();
-	process.exit(0);
+});
+
+/** Bun-native server — no @hono/node-server needed. */
+export default {
+	port,
+	fetch: app.fetch,
 };
-
-process.on("SIGTERM", shutdown);
-process.on("SIGINT", shutdown);
-
-serve({ fetch: app.fetch, port });

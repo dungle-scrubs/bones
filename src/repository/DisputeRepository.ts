@@ -112,7 +112,7 @@ export class DisputeRepository {
       LIMIT 1
     `);
 		const result = stmt.get(findingId, disputerId);
-		return result !== undefined;
+		return result != null;
 	}
 
 	/**

@@ -1,6 +1,6 @@
+import { Database as BunDatabase } from "bun:sqlite";
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import BetterSqlite3, { type Database as SqliteDatabase } from "better-sqlite3";
 
 /**
  * SQLite schema for Bones game state.
@@ -110,7 +110,7 @@ CREATE INDEX IF NOT EXISTS idx_disputes_status ON disputes(status);
  * Uses WAL mode for better concurrent read performance.
  */
 export class Database {
-	private db: SqliteDatabase;
+	private db: BunDatabase;
 
 	constructor(dbPath: string) {
 		// Ensure directory exists
@@ -119,9 +119,9 @@ export class Database {
 			mkdirSync(dir, { recursive: true });
 		}
 
-		this.db = new BetterSqlite3(dbPath);
-		this.db.pragma("journal_mode = WAL");
-		this.db.pragma("foreign_keys = ON");
+		this.db = new BunDatabase(dbPath);
+		this.db.exec("PRAGMA journal_mode = WAL");
+		this.db.exec("PRAGMA foreign_keys = ON");
 		this.migrate();
 	}
 
@@ -152,7 +152,6 @@ export class Database {
 		// Migration: rename bug_category to issue_type, add impact_tier and rejection_reason
 		try {
 			this.db.exec("ALTER TABLE findings ADD COLUMN issue_type TEXT");
-			// Copy data from old column if it exists
 			this.db.exec(
 				"UPDATE findings SET issue_type = bug_category WHERE issue_type IS NULL AND bug_category IS NOT NULL",
 			);
@@ -191,7 +190,6 @@ export class Database {
 		}
 		try {
 			this.db.exec("ALTER TABLE games ADD COLUMN user_prompt TEXT");
-			// Copy hunt_prompt to user_prompt for existing games
 			this.db.exec(
 				"UPDATE games SET user_prompt = hunt_prompt WHERE user_prompt IS NULL AND hunt_prompt IS NOT NULL",
 			);
@@ -201,7 +199,7 @@ export class Database {
 	}
 
 	/** Exposes the raw SQLite connection for repository layer queries. */
-	get connection(): SqliteDatabase {
+	get connection(): BunDatabase {
 		return this.db;
 	}
 

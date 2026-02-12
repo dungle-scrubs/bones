@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { Agent } from "./Agent.js";
 import { AgentStatus } from "./types.js";
 
