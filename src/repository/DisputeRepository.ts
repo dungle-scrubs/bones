@@ -135,13 +135,16 @@ export class DisputeRepository {
       WHERE id = ?
     `);
 
-		stmt.run(
+		const result = stmt.run(
 			row.status,
 			row.referee_verdict,
 			row.points_awarded,
 			row.resolved_at,
 			row.id,
 		);
+		if (result.changes === 0) {
+			throw new Error(`Dispute not found for update: ${row.id}`);
+		}
 	}
 
 	/** Returns number of disputes awaiting resolution. */

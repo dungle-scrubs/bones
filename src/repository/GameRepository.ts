@@ -145,7 +145,7 @@ export class GameRepository {
       WHERE id = ?
     `);
 
-		stmt.run(
+		const result = stmt.run(
 			row.current_round,
 			row.phase,
 			row.phase_ends_at,
@@ -153,6 +153,9 @@ export class GameRepository {
 			row.completed_at,
 			row.id,
 		);
+		if (result.changes === 0) {
+			throw new Error(`Game not found for update: ${row.id}`);
+		}
 	}
 
 	/**

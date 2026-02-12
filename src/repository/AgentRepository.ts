@@ -101,7 +101,7 @@ export class AgentRepository {
       WHERE id = ?
     `);
 
-		stmt.run(
+		const result = stmt.run(
 			row.score,
 			row.findings_submitted,
 			row.findings_valid,
@@ -115,6 +115,9 @@ export class AgentRepository {
 			row.last_heartbeat,
 			row.id,
 		);
+		if (result.changes === 0) {
+			throw new Error(`Agent not found for update: ${row.id}`);
+		}
 	}
 
 	/**

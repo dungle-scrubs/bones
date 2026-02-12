@@ -258,7 +258,7 @@ export class FindingRepository {
       WHERE id = ?
     `);
 
-		stmt.run(
+		const result = stmt.run(
 			row.status,
 			row.duplicate_of,
 			row.referee_verdict,
@@ -273,6 +273,9 @@ export class FindingRepository {
 			row.verifier_explanation,
 			row.id,
 		);
+		if (result.changes === 0) {
+			throw new Error(`Finding not found for update: ${row.id}`);
+		}
 	}
 
 	/** Lists findings pending verification after initial validation. */
