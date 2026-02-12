@@ -162,12 +162,13 @@ export class SubmissionService {
 			);
 		}
 
-		const agent = this.agentRepo.findById(finding.agentId);
-		if (!agent) {
-			throw new Error(`Agent not found: ${finding.agentId}`);
-		}
-
 		const points = this.db.transaction(() => {
+			// Fetch agent inside transaction to prevent lost updates
+			const agent = this.agentRepo.findById(finding.agentId);
+			if (!agent) {
+				throw new Error(`Agent not found: ${finding.agentId}`);
+			}
+
 			const pts = finding.applyVerification(
 				confirmed,
 				explanation,

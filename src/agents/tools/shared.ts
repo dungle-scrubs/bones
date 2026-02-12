@@ -226,21 +226,23 @@ export function createSearchCodeTool(projectPath: string, filter?: PathFilter): 
 			rawParams,
 		): Promise<AgentToolResult<{ matchCount: number }>> {
 			const params = rawParams as { pattern: string; path?: string };
-			let searchPath = params.path
-				? resolve(projectPath, params.path)
-				: projectPath;
 
-			// If include patterns set and no specific path, search only included dirs
-			if (!params.path && filter?.include && filter.include.length > 0) {
-				searchPath = filter.include
-					.map((inc) => resolve(projectPath, inc.replace(/\/+$/, "")))
-					.join(" ");
+			// Resolve search paths as an array — each individually quoted for shell safety
+			let searchPaths: string[];
+			if (params.path) {
+				searchPaths = [resolve(projectPath, params.path)];
+			} else if (filter?.include && filter.include.length > 0) {
+				searchPaths = filter.include.map((inc) =>
+					resolve(projectPath, inc.replace(/\/+$/, "")),
+				);
+			} else {
+				searchPaths = [projectPath];
 			}
 
 			// Prevent path traversal
-			const paths = searchPath.split(" ");
-			for (const p of paths) {
-				if (!p.startsWith(resolve(projectPath))) {
+			const resolvedRoot = resolve(projectPath);
+			for (const p of searchPaths) {
+				if (!p.startsWith(resolvedRoot)) {
 					return {
 						content: [{ type: "text", text: "Error: path traversal outside project" }],
 						details: { matchCount: 0 },
@@ -248,9 +250,12 @@ export function createSearchCodeTool(projectPath: string, filter?: PathFilter): 
 				}
 			}
 
+			// Quote each path individually to prevent shell injection
+			const quotedPaths = searchPaths.map((p) => JSON.stringify(p)).join(" ");
+
 			try {
 				const result = execSync(
-					`grep -rn ${excludeDirFlags} ${excludeFileFlags} --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" --include="*.py" --include="*.rs" --include="*.go" --include="*.md" --include="*.json" --include="*.yaml" --include="*.yml" --include="*.toml" -E ${JSON.stringify(params.pattern)} ${searchPath} 2>/dev/null | head -100`,
+					`grep -rn ${excludeDirFlags} ${excludeFileFlags} --include="*.ts" --include="*.tsx" --include="*.js" --include="*.jsx" --include="*.py" --include="*.rs" --include="*.go" --include="*.md" --include="*.json" --include="*.yaml" --include="*.yml" --include="*.toml" -E ${JSON.stringify(params.pattern)} ${quotedPaths} 2>/dev/null | head -100`,
 					{ encoding: "utf-8", maxBuffer: 1024 * 1024 },
 				);
 

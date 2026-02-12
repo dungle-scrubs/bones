@@ -133,11 +133,10 @@ export class Scorer {
 					// Check if finding was pending verification (stats never recorded)
 					const wasPendingVerification = finding.needsVerification;
 
-					// Reverse the finder's points (they lose the valid finding points)
-					// and get false flag penalty instead
-					finder.awardPoints(-finding.pointsAwarded); // Remove original points
+					// Swing finder's score from valid (+1) to false flag (-2)
+					const oldPoints = finding.pointsAwarded;
 					finding.revokeValidation(`Disputed: ${explanation}`); // Valid → FalseFlag
-					finder.awardPoints(finding.pointsAwarded); // Apply new (negative) points
+					finder.awardPoints(finding.pointsAwarded - oldPoints); // Net adjustment
 
 					// Update stats based on whether verification was pending
 					if (wasPendingVerification) {

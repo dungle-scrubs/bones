@@ -131,81 +131,35 @@ export class Database {
 	 */
 	private migrate(): void {
 		this.db.exec(SCHEMA);
-		// Add max_rounds column if missing (migration for existing DBs)
-		try {
-			this.db.exec("ALTER TABLE games ADD COLUMN max_rounds INTEGER DEFAULT 3");
-		} catch {
-			// Column already exists
-		}
-		// Add confidence column if missing (migration for existing DBs)
-		try {
-			this.db.exec("ALTER TABLE findings ADD COLUMN confidence TEXT");
-		} catch {
-			// Column already exists
-		}
-		// Add verification columns if missing (migration for existing DBs)
-		try {
-			this.db.exec("ALTER TABLE findings ADD COLUMN confidence_score INTEGER");
-		} catch {
-			// Column already exists
-		}
-		// Migration: rename bug_category to issue_type, add impact_tier and rejection_reason
-		try {
-			this.db.exec("ALTER TABLE findings ADD COLUMN issue_type TEXT");
-		} catch {
-			// Column already exists
-		}
-		// Data migration — only runs if legacy bug_category column exists
-		try {
-			this.db.exec(
-				"UPDATE findings SET issue_type = bug_category WHERE issue_type IS NULL AND bug_category IS NOT NULL",
-			);
-		} catch {
-			// bug_category column doesn't exist on fresh DBs — safe to skip
-		}
-		try {
-			this.db.exec("ALTER TABLE findings ADD COLUMN impact_tier TEXT");
-		} catch {
-			// Column already exists
-		}
-		try {
-			this.db.exec("ALTER TABLE findings ADD COLUMN rejection_reason TEXT");
-		} catch {
-			// Column already exists
-		}
-		try {
-			this.db.exec(
-				"ALTER TABLE findings ADD COLUMN verification_status TEXT DEFAULT 'none'",
-			);
-		} catch {
-			// Column already exists
-		}
-		try {
-			this.db.exec("ALTER TABLE findings ADD COLUMN verifier_explanation TEXT");
-		} catch {
-			// Column already exists
-		}
-		// Migrate from hunt_prompt to category/user_prompt
-		try {
-			this.db.exec(
-				"ALTER TABLE games ADD COLUMN category TEXT NOT NULL DEFAULT 'bugs'",
-			);
-		} catch {
-			// Column already exists
-		}
-		try {
-			this.db.exec("ALTER TABLE games ADD COLUMN user_prompt TEXT");
-		} catch {
-			// Column already exists
-		}
-		// Data migration — only runs if legacy hunt_prompt column exists
-		try {
-			this.db.exec(
-				"UPDATE games SET user_prompt = hunt_prompt WHERE user_prompt IS NULL AND hunt_prompt IS NOT NULL",
-			);
-		} catch {
-			// Column already exists
-		}
+
+		// Column migrations — each ALTER TABLE is idempotent (fails silently if exists).
+		// Data migrations follow their corresponding column additions.
+		const addColumn = (sql: string): void => {
+			try { this.db.exec(sql); } catch { /* column already exists */ }
+		};
+		const tryExec = (sql: string): void => {
+			try { this.db.exec(sql); } catch { /* safe to skip — legacy column missing */ }
+		};
+
+		this.db.transaction(() => {
+			addColumn("ALTER TABLE games ADD COLUMN max_rounds INTEGER DEFAULT 3");
+			addColumn("ALTER TABLE findings ADD COLUMN confidence TEXT");
+			addColumn("ALTER TABLE findings ADD COLUMN confidence_score INTEGER");
+
+			// Rename bug_category → issue_type
+			addColumn("ALTER TABLE findings ADD COLUMN issue_type TEXT");
+			tryExec("UPDATE findings SET issue_type = bug_category WHERE issue_type IS NULL AND bug_category IS NOT NULL");
+
+			addColumn("ALTER TABLE findings ADD COLUMN impact_tier TEXT");
+			addColumn("ALTER TABLE findings ADD COLUMN rejection_reason TEXT");
+			addColumn("ALTER TABLE findings ADD COLUMN verification_status TEXT DEFAULT 'none'");
+			addColumn("ALTER TABLE findings ADD COLUMN verifier_explanation TEXT");
+
+			// Rename hunt_prompt → category/user_prompt
+			addColumn("ALTER TABLE games ADD COLUMN category TEXT NOT NULL DEFAULT 'bugs'");
+			addColumn("ALTER TABLE games ADD COLUMN user_prompt TEXT");
+			tryExec("UPDATE games SET user_prompt = hunt_prompt WHERE user_prompt IS NULL AND hunt_prompt IS NOT NULL");
+		})();
 	}
 
 	/** Exposes the raw SQLite connection for repository layer queries. */
