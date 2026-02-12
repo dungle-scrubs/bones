@@ -30,6 +30,16 @@ Usage: bones <command> [args]
 Setup Commands:
   init                      Install dependencies (required before --web)
 
+Autonomous Game:
+  play <project_path> [opts] Run a fully autonomous game with LLM agents
+    --model <provider/model>   Agent model (default: anthropic/claude-sonnet-4-0)
+    --referee-model <p/m>      Referee model (default: same as --model)
+    --category <type>          Hunt category
+    --target <score>           Target score (default: 10)
+    --agents <count>           Number of agents (default: 3)
+    --thinking <level>         Agent thinking level (default: medium)
+    --referee-thinking <level> Referee thinking level (default: high)
+
 Game Flow Commands:
   setup <url> [options]     Create a new game
     --web, -w               Start API server and dashboard, print URLs
@@ -102,6 +112,7 @@ const commandHandlers: Record<
 	(args: string[]) => string | Promise<string>
 > = {
 	init: () => commands.init(),
+	play: (a) => commands.play(a),
 	setup: (a) => commands.setup(a),
 	"start-hunt": (a) => commands.startHunt(a),
 	"check-hunt": (a) => commands.checkHunt(a),

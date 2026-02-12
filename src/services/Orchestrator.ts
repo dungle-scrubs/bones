@@ -25,7 +25,7 @@ import { DisputeRepository } from "../repository/DisputeRepository.js";
 import { FindingRepository } from "../repository/FindingRepository.js";
 import { GameRepository } from "../repository/GameRepository.js";
 import { Exporter } from "./Exporter.js";
-import { PromptRenderer } from "./PromptRenderer.js";
+import { type PromptMode, PromptRenderer } from "./PromptRenderer.js";
 import { Scorer } from "./Scorer.js";
 
 /** Input configuration for creating a new game session. */

@@ -1,6 +1,6 @@
 import { execSync, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
 	HuntCategory,
@@ -13,6 +13,11 @@ import {
 	ensureDashboardRunning,
 	getDashboardUrl,
 } from "../services/DashboardLauncher.js";
+import {
+	type GameEvent,
+	GameRunner,
+	type PlayConfig,
+} from "../services/GameRunner.js";
 import type { Orchestrator, SetupConfig } from "../services/Orchestrator.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -761,6 +766,288 @@ export class Commands {
 
 		await waitUntilExit();
 		return JSON.stringify({ exited: true });
+	}
+
+	/**
+	 * Runs a fully autonomous game. Spawns LLM agents for all roles.
+	 * Uses pi-agent-core for agent loops and pi-ai for model resolution.
+	 *
+	 * @param args - CLI arguments: <project_url> [options]
+	 * @returns JSON summary when game completes
+	 */
+	async play(args: string[]): Promise<string> {
+		const projectUrl = args[0];
+		if (!projectUrl) {
+			return JSON.stringify({
+				error: `Usage: play <project_path> [options]
+  --model <provider/model>      Agent model (default: anthropic/claude-sonnet-4-0)
+  --referee-model <provider/m>  Referee model (default: same as --model)
+  --category <type>             Hunt category
+  --target <score>              Target score (default: 10)
+  --agents <count>              Number of agents (default: 3)
+  --max-rounds <n>              Max rounds (default: 3)
+  --thinking <level>            Agent thinking: off|minimal|low|medium|high (default: medium)
+  --referee-thinking <level>    Referee thinking (default: high)`,
+			});
+		}
+
+		// Lazy import to avoid loading pi-ai unless play is used
+		const { getModel, registerBuiltInApiProviders } = await import(
+			"@mariozechner/pi-ai"
+		);
+		registerBuiltInApiProviders();
+
+		// Resolve project path
+		const projectPath = resolve(projectUrl);
+		if (!existsSync(projectPath)) {
+			return JSON.stringify({
+				error: `Project path not found: ${projectPath}`,
+			});
+		}
+
+		// Parse play-specific options
+		let modelSpec = "anthropic/claude-sonnet-4-0";
+		let refereeModelSpec: string | undefined;
+		let agentThinking: string = "medium";
+		let refereeThinking: string = "high";
+
+		const setupArgs: string[] = [projectUrl];
+		let i = 1;
+		while (i < args.length) {
+			const flag = args[i];
+			const value = args[i + 1];
+
+			switch (flag) {
+				case "--model":
+					modelSpec = value;
+					i += 2;
+					break;
+				case "--referee-model":
+					refereeModelSpec = value;
+					i += 2;
+					break;
+				case "--thinking":
+					agentThinking = value;
+					i += 2;
+					break;
+				case "--referee-thinking":
+					refereeThinking = value;
+					i += 2;
+					break;
+				default:
+					// Pass through to setup config parsing
+					setupArgs.push(flag);
+					if (value && !value.startsWith("--")) {
+						setupArgs.push(value);
+						i += 2;
+					} else {
+						i += 1;
+					}
+					break;
+			}
+		}
+
+		// Resolve models
+		const [agentProvider, agentModelId] = modelSpec.split("/") as [
+			string,
+			string,
+		];
+		const agentModel = getModel(agentProvider as any, agentModelId as any);
+
+		const refereeModel = refereeModelSpec
+			? (() => {
+					const [p, m] = refereeModelSpec!.split("/") as [string, string];
+					return getModel(p as any, m as any);
+				})()
+			: agentModel;
+
+		// Parse setup config from remaining args
+		const config = this.parseSetupConfig(setupArgs);
+		if ("error" in config) {
+			return JSON.stringify(config);
+		}
+
+		const playConfig: PlayConfig = {
+			...config,
+			agentModel,
+			refereeModel,
+			agentThinking: agentThinking as any,
+			refereeThinking: refereeThinking as any,
+		};
+
+		// Run the game
+		const runner = new GameRunner(this.orchestrator, projectPath);
+
+		for await (const event of runner.play(playConfig)) {
+			this.logGameEvent(event);
+
+			if (event.type === "game_complete") {
+				return JSON.stringify(
+					{
+						winner: event.winner,
+						reason: event.reason,
+						totalCost: {
+							totalTokens: event.totalCost.totalTokens,
+							cost: `$${event.totalCost.cost.total.toFixed(4)}`,
+						},
+					},
+					null,
+					2,
+				);
+			}
+		}
+
+		return JSON.stringify({ error: "Game ended without a winner" });
+	}
+
+	/**
+	 * Parses setup config from CLI args without the --web flag.
+	 * Extracted for reuse between setup() and play().
+	 *
+	 * @param args - CLI arguments starting with project URL
+	 * @returns SetupConfig or error object
+	 */
+	private parseSetupConfig(args: string[]): SetupConfig | { error: string } {
+		const projectUrl = args[0];
+		if (!projectUrl) {
+			return { error: "Missing project URL" };
+		}
+
+		const config: SetupConfig = { projectUrl };
+		let i = 1;
+		while (i < args.length) {
+			const flag = args[i];
+			const value = args[i + 1];
+
+			if (value === undefined) {
+				return { error: `Missing value for flag: ${flag}` };
+			}
+
+			switch (flag) {
+				case "--category":
+				case "-c":
+					if (!VALID_CATEGORIES.includes(value as HuntCategory)) {
+						return {
+							error: `Invalid category: ${value}. Valid: ${VALID_CATEGORIES.join(", ")}`,
+						};
+					}
+					config.category = value as HuntCategory;
+					break;
+				case "--focus":
+				case "-f":
+					config.userPrompt = value;
+					break;
+				case "--target":
+				case "-t":
+					config.targetScore = parseInt(value, 10);
+					break;
+				case "--agents":
+				case "-a":
+					config.numAgents = parseInt(value, 10);
+					break;
+				case "--max-rounds":
+				case "-m":
+					config.maxRounds = parseInt(value, 10);
+					break;
+				case "--hunt-duration":
+				case "-h":
+					config.huntDuration = parseInt(value, 10);
+					break;
+				case "--review-duration":
+				case "-r":
+					config.reviewDuration = parseInt(value, 10);
+					break;
+				default:
+					return { error: `Unknown flag: ${flag}` };
+			}
+			i += 2;
+		}
+
+		return config;
+	}
+
+	/**
+	 * Logs a GameEvent as a structured CLI line.
+	 *
+	 * @param event - GameEvent to format and print
+	 */
+	private logGameEvent(event: GameEvent): void {
+		switch (event.type) {
+			case "game_created":
+				console.log(
+					`[setup]   game=${event.gameId} agents=${event.agents.join(",")}`,
+				);
+				break;
+			case "round_start":
+				console.log(`\n[round]   === Round ${event.round} ===`);
+				break;
+			case "hunt_start":
+				console.log(
+					`[hunt]    starting round=${event.round} agents=${event.agentCount}`,
+				);
+				break;
+			case "hunt_agent_done":
+				console.log(
+					`[hunt]    ${event.agentId} done turns=${event.result.turnCount} cost=$${event.result.totalUsage.cost.total.toFixed(4)}`,
+				);
+				break;
+			case "hunt_end":
+				console.log(`[hunt]    round=${event.round} complete`);
+				break;
+			case "scoring_start":
+				console.log(`[referee] validating ${event.findingCount} findings`);
+				break;
+			case "finding_validated":
+				console.log(`[referee] finding #${event.findingId} → ${event.verdict}`);
+				break;
+			case "scoring_end":
+				console.log(`[referee] scoring complete`);
+				break;
+			case "verification_start":
+				console.log(`[verify]  verifying ${event.count} uncertain findings`);
+				break;
+			case "finding_verified":
+				console.log(
+					`[verify]  finding #${event.findingId} → ${event.confirmed ? "CONFIRMED" : "REJECTED"}`,
+				);
+				break;
+			case "verification_end":
+				console.log(`[verify]  verification complete`);
+				break;
+			case "review_start":
+				console.log(
+					`[review]  starting round=${event.round} agents=${event.agentCount}`,
+				);
+				break;
+			case "review_agent_done":
+				console.log(
+					`[review]  ${event.agentId} done turns=${event.result.turnCount} cost=$${event.result.totalUsage.cost.total.toFixed(4)}`,
+				);
+				break;
+			case "review_end":
+				console.log(`[review]  round=${event.round} complete`);
+				break;
+			case "dispute_scoring_start":
+				console.log(`[referee] resolving ${event.disputeCount} disputes`);
+				break;
+			case "dispute_resolved":
+				console.log(`[referee] dispute #${event.disputeId} → ${event.verdict}`);
+				break;
+			case "dispute_scoring_end":
+				console.log(`[referee] dispute resolution complete`);
+				break;
+			case "round_complete":
+				console.log(
+					`[round]   ${event.action}${event.winner ? ` winner=${event.winner}` : ""} — ${event.reason}`,
+				);
+				break;
+			case "game_complete":
+				console.log(`\n[winner]  ${event.winner} — ${event.reason}`);
+				console.log(
+					`[cost]    tokens=${event.totalCost.totalTokens} cost=$${event.totalCost.cost.total.toFixed(4)}`,
+				);
+				break;
+		}
 	}
 
 	/**

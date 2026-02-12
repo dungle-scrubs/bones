@@ -25,6 +25,9 @@
 	},
 	"dependencies": {
 		"@hono/node-server": "^1.13.8",
+		"@mariozechner/pi-agent-core": "^0.52.9",
+		"@mariozechner/pi-ai": "^0.52.9",
+		"@sinclair/typebox": "^0.34.48",
 		"better-sqlite3": "^11.7.0",
 		"hono": "^4.7.6",
 		"ink": "^6.6.0",
