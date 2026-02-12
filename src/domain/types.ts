@@ -1,5 +1,5 @@
 /**
- * Game phases that define the state machine for a Code Hunt session.
+ * Game phases that define the state machine for a Bones session.
  * Phases progress in order with ReviewScoring looping back to Hunt for new rounds.
  */
 export enum Phase {

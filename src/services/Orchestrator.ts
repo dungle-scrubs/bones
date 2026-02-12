@@ -25,7 +25,6 @@ import { DisputeRepository } from "../repository/DisputeRepository.js";
 import { FindingRepository } from "../repository/FindingRepository.js";
 import { GameRepository } from "../repository/GameRepository.js";
 import { Exporter } from "./Exporter.js";
-import { loadProjectContext, type ProjectContext } from "./ProjectContext.js";
 import { PromptRenderer } from "./PromptRenderer.js";
 import { Scorer } from "./Scorer.js";
 
@@ -56,7 +55,7 @@ export interface ExportResult {
 }
 
 /**
- * Central coordinator for Code Hunt game logic.
+ * Central coordinator for Bones game logic.
  * Manages game lifecycle, phase transitions, and coordinates between
  * repositories, scorer, and prompt renderer. This is the main API
  * that the CLI commands interact with.
@@ -71,7 +70,6 @@ export class Orchestrator {
 	private promptRenderer: PromptRenderer;
 	private exporter: Exporter;
 	private scriptsPath: string;
-	private projectContextCache: Map<string, ProjectContext | null>;
 
 	constructor(dbPath: string, scriptsPath: string) {
 		this.db = new Database(dbPath);
@@ -88,32 +86,6 @@ export class Orchestrator {
 		this.promptRenderer = new PromptRenderer();
 		this.exporter = new Exporter();
 		this.scriptsPath = scriptsPath;
-		this.projectContextCache = new Map();
-	}
-
-	/**
-	 * Gets project context for a game, loading from .words_hurt if available.
-	 * Caches result per projectUrl to avoid repeated filesystem access.
-	 */
-	private getProjectContext(projectUrl: string): ProjectContext | null {
-		if (this.projectContextCache.has(projectUrl)) {
-			return this.projectContextCache.get(projectUrl) ?? null;
-		}
-
-		// Only load for local paths (not GitHub URLs)
-		const isLocalPath =
-			!projectUrl.startsWith("http://") && !projectUrl.startsWith("https://");
-		const context = isLocalPath ? loadProjectContext(projectUrl) : null;
-
-		this.projectContextCache.set(projectUrl, context);
-		return context;
-	}
-
-	/** Returns projectUrl if it's a local path, undefined otherwise. */
-	private getLocalProjectPath(projectUrl: string): string | undefined {
-		const isLocalPath =
-			!projectUrl.startsWith("http://") && !projectUrl.startsWith("https://");
-		return isLocalPath ? projectUrl : undefined;
 	}
 
 	/**
@@ -280,9 +252,6 @@ export class Orchestrator {
 			game.round,
 		);
 
-		const projectContext = this.getProjectContext(game.config.projectUrl);
-		const projectPath = this.getLocalProjectPath(game.config.projectUrl);
-
 		const validations = pendingFindings.map((finding) => ({
 			findingId: finding.id,
 			type: "finding_validation" as const,
@@ -298,8 +267,6 @@ export class Orchestrator {
 				projectUrl: game.config.projectUrl,
 				scriptsPath: this.scriptsPath,
 				category: game.category,
-				projectContext,
-				projectPath,
 			}),
 		}));
 
@@ -384,9 +351,6 @@ export class Orchestrator {
 			game.round,
 		);
 
-		const projectContext = this.getProjectContext(game.config.projectUrl);
-		const projectPath = this.getLocalProjectPath(game.config.projectUrl);
-
 		const findings = pendingFindings.map((finding) => ({
 			findingId: finding.id,
 			prompt: this.promptRenderer.renderVerificationPrompt({
@@ -404,8 +368,6 @@ export class Orchestrator {
 				originalVerdict: finding.refereeVerdict ?? "",
 				confidenceScore: finding.confidenceScore ?? 0,
 				issueType: finding.issueType,
-				projectContext,
-				projectPath,
 			}),
 		}));
 

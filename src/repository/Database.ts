@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 import BetterSqlite3, { type Database as SqliteDatabase } from "better-sqlite3";
 
 /**
- * SQLite schema for Code Hunt game state.
+ * SQLite schema for Bones game state.
  * Defines tables for games, agents, findings, and disputes with foreign key relationships.
  */
 const SCHEMA = `

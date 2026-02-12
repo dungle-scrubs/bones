@@ -68,7 +68,7 @@ async function ensureApiServerRunning(): Promise<{ started: boolean }> {
 		cwd: SKILL_DIR,
 		detached: true,
 		stdio: "ignore",
-		env: { ...process.env, CODE_HUNT_PORT: String(API_PORT) },
+		env: { ...process.env, BONES_PORT: String(API_PORT) },
 	});
 
 	child.unref();

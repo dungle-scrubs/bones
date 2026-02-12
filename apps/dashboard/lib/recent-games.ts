@@ -1,4 +1,4 @@
-const STORAGE_KEY = "code-hunt-recent-games";
+const STORAGE_KEY = "bones-recent-games";
 const MAX_RECENT = 10;
 
 /** Check if we're in a browser with working localStorage */

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Code Hunt CLI entry point.
+ * Bones CLI entry point.
  * Parses command-line arguments and routes to appropriate command handlers.
- * Uses shared database at ~/.code-hunt/ for cross-session persistence.
+ * Uses shared database at ~/.bones/ for cross-session persistence.
  */
 
 import { homedir } from "node:os";
@@ -13,19 +13,19 @@ import { Orchestrator } from "./services/Orchestrator.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Resolve paths - use ~/.code-hunt/ for shared DB across dev/cache
-const dataDir = process.env.CODE_HUNT_DATA_DIR ?? join(homedir(), ".code-hunt");
+// Resolve paths - use ~/.bones/ for shared DB across dev/cache
+const dataDir = process.env.BONES_DATA_DIR ?? join(homedir(), ".bones");
 const dbPath = join(dataDir, "game.db");
 const scriptsPath =
-	process.env.CODE_HUNT_SCRIPTS_PATH ?? join(__dirname, "..", "scripts");
+	process.env.BONES_SCRIPTS_PATH ?? join(__dirname, "..", "scripts");
 
 // Parse command line
 const [, , command, ...args] = process.argv;
 
 if (!command) {
-	console.log(`Code Hunt - Competitive Code Review Game
+	console.log(`Bones - Competitive Code Review Game
 
-Usage: code-hunt <command> [args]
+Usage: bones <command> [args]
 
 Setup Commands:
   init                      Install dependencies (required before --web)
@@ -74,20 +74,20 @@ Query Commands:
 
 Examples:
   # Default bug hunt
-  code-hunt setup https://github.com/example/repo
+  bones setup https://github.com/example/repo
 
   # Documentation drift
-  code-hunt setup https://github.com/example/repo -c doc_drift
+  bones setup https://github.com/example/repo -c doc_drift
 
   # Bug hunt with focus
-  code-hunt setup https://github.com/example/repo -c bugs -f "Focus on auth code"
+  bones setup https://github.com/example/repo -c bugs -f "Focus on auth code"
 
   # Export results
-  code-hunt export my-project-a1b2c3
+  bones export my-project-a1b2c3
 
 Output:
   Game IDs: {project-name}-{short-id} (e.g., my-repo-a1b2c3)
-  Logs: skills/code-hunt/logs/{game-id}/findings.md
+  Logs: bones/logs/{game-id}/findings.md
 `);
 	process.exit(0);
 }
@@ -127,7 +127,7 @@ const commandHandlers: Record<
 const handler = commandHandlers[command];
 if (!handler) {
 	console.error(`Unknown command: ${command}`);
-	console.error("Run 'code-hunt' without arguments for usage.");
+	console.error("Run 'bones' without arguments for usage.");
 	orchestrator.close();
 	process.exit(1);
 }

@@ -4,3 +4,5 @@ dist/
 *.db
 logs/
 .words_hurt/
+.DS_Store
+.tallow/

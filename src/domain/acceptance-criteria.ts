@@ -1,5 +1,5 @@
 /**
- * Acceptance Criteria for Code Hunt Categories
+ * Acceptance Criteria for Bones Categories
  *
  * IMPORTANT: No code execution is possible. All validation is based on
  * static analysis and argument quality. Claims cannot be "verified", only

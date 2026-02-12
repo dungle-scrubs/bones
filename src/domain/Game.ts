@@ -8,7 +8,7 @@ import {
 } from "./types.js";
 
 /**
- * Represents a Code Hunt game session with multiple competing agents.
+ * Represents a Bones game session with multiple competing agents.
  * Manages the game lifecycle through phases: Setup → Hunt → HuntScoring → Review → ReviewScoring.
  * Games loop through rounds until an agent reaches the target score or max rounds is hit.
  */

@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * Code Hunt API Server
+ * Bones API Server
  *
  * Provides REST and SSE endpoints for the dashboard to query game state.
  * Runs independently of the CLI, accessing the same SQLite database.
- * Default port: 8019 (configurable via CODE_HUNT_PORT env var)
+ * Default port: 8019 (configurable via BONES_PORT env var)
  */
 
 import { homedir } from "node:os";
@@ -17,11 +17,11 @@ import { Orchestrator } from "./services/Orchestrator.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Use ~/.code-hunt/ for shared DB across dev/cache
-const dataDir = process.env.CODE_HUNT_DATA_DIR ?? join(homedir(), ".code-hunt");
+// Use ~/.bones/ for shared DB across dev/cache
+const dataDir = process.env.BONES_DATA_DIR ?? join(homedir(), ".bones");
 const dbPath = join(dataDir, "game.db");
 const scriptsPath =
-	process.env.CODE_HUNT_SCRIPTS_PATH ?? join(__dirname, "..", "scripts");
+	process.env.BONES_SCRIPTS_PATH ?? join(__dirname, "..", "scripts");
 
 const orchestrator = new Orchestrator(dbPath, scriptsPath);
 
@@ -254,9 +254,9 @@ app.get("/api/games/:id/events", async (c) => {
 /** Simple health check for monitoring/load balancers. */
 app.get("/health", (c) => c.json({ status: "ok" }));
 
-const port = parseInt(process.env.CODE_HUNT_PORT ?? "8019", 10);
+const port = parseInt(process.env.BONES_PORT ?? "8019", 10);
 
-console.log(`Code Hunt API server starting on http://localhost:${port}`);
+console.log(`Bones API server starting on http://localhost:${port}`);
 console.log(`  Database: ${dbPath}`);
 console.log(`  Endpoints:`);
 console.log(`    GET /api/games/:id          - Game state + scoreboard`);

@@ -10,8 +10,6 @@ import {
 	RejectionReason,
 	type ScoreboardEntry,
 } from "../domain/types.js";
-import type { ProjectContext } from "./ProjectContext.js";
-import { composePrompt } from "./PromptComposer.js";
 
 /** Variables needed to render a hunt phase prompt for an agent. */
 export interface HuntPromptVars {
@@ -56,8 +54,6 @@ export interface FindingValidationVars {
 	projectUrl: string;
 	scriptsPath: string;
 	category: HuntCategory;
-	projectPath?: string; // Local path where .words_hurt exists (for CLI invocation)
-	projectContext?: ProjectContext | null;
 }
 
 /** Variables needed to render a dispute resolution prompt for the referee. */
@@ -93,8 +89,6 @@ export interface VerificationPromptVars {
 	originalVerdict: string;
 	confidenceScore: number;
 	issueType: IssueType | null;
-	projectPath?: string; // Local path where .words_hurt exists (for CLI invocation)
-	projectContext?: ProjectContext | null;
 }
 
 /**
@@ -113,7 +107,7 @@ export class PromptRenderer {
 		);
 		const acceptanceCriteria = formatAcceptanceCriteria(vars.category) || "";
 
-		return `# Code Hunt - Round ${vars.round}
+		return `# Bones - Round ${vars.round}
 
 ## ⚠️ PENALTY WARNING - READ THIS FIRST
 | Outcome | Points | What it means |
@@ -185,7 +179,7 @@ ${scoreboard}
 		const scoreboard = this.formatScoreboard(vars.scoreboard);
 		const findings = this.formatFindings(vars.findings);
 
-		return `# Code Hunt - Review Phase - Round ${vars.round}
+		return `# Bones - Review Phase - Round ${vars.round}
 
 ## Game Info
 - **Game ID:** ${vars.gameId}
@@ -226,68 +220,9 @@ Successful disputes earn points. Failed disputes cost points.
 
 	/**
 	 * Generates a finding validation prompt for the referee.
-	 * Uses wh CLI if project has .words_hurt initialized, otherwise falls back to built-in.
+	 * Includes category-specific criteria, edge cases, and classification guidance.
 	 */
 	renderFindingValidation(vars: FindingValidationVars): string {
-		// Try to use wh CLI for validation prompt
-		if (vars.projectPath) {
-			const cliPrompt = this.tryComposeWithCLI(vars);
-			if (cliPrompt) {
-				return cliPrompt;
-			}
-		}
-
-		// Fallback to built-in validation prompt
-		return this.renderBuiltInValidation(vars);
-	}
-
-	/**
-	 * Attempts to compose validation prompt using wh CLI.
-	 * Returns null if CLI fails or .words_hurt not initialized.
-	 */
-	private tryComposeWithCLI(vars: FindingValidationVars): string | null {
-		if (!vars.projectPath) return null;
-
-		// Structure matches template expectations: $report placeholder
-		const input = {
-			report: {
-				file: vars.filePath,
-				lines: [vars.lineStart, vars.lineEnd],
-				description: vars.description,
-				category: vars.category,
-				findingId: vars.findingId,
-				submittedBy: vars.agentId,
-				codeSnippet: vars.codeSnippet,
-			},
-		};
-
-		const result = composePrompt("validate", "bug", input, vars.projectPath);
-		if (!result.ok) {
-			return null; // Fall back to built-in
-		}
-
-		// Append game-specific commands to CLI output
-		return `${result.prompt}
-
-## Game Commands
-
-\`\`\`bash
-# VALID finding:
-${vars.scriptsPath}/validate.sh ${vars.gameId} ${vars.findingId} VALID "<explanation>" <confidence_score> <issue_type> <impact_tier> <needs_verification>
-
-# FALSE finding:
-${vars.scriptsPath}/validate.sh ${vars.gameId} ${vars.findingId} FALSE "<explanation>" <confidence_score> <rejection_reason>
-
-# DUPLICATE:
-${vars.scriptsPath}/validate.sh ${vars.gameId} ${vars.findingId} DUPLICATE "<explanation>" <duplicate_of_id>
-\`\`\`
-`;
-	}
-
-	/**
-	 * Built-in validation prompt when wh CLI is not available.
-	 */
-	private renderBuiltInValidation(vars: FindingValidationVars): string {
 		const criteria = ACCEPTANCE_CRITERIA[vars.category];
 		const edgeCaseSection = this.formatEdgeCasesForReferee(vars.category);
 
@@ -583,7 +518,7 @@ The initial referee was uncertain about this finding. You must independently ver
 1. **Read the actual code** at ${vars.projectUrl}
 2. Navigate to ${vars.filePath}:${vars.lineStart}-${vars.lineEnd}
 3. Determine if the claimed issue is real
-${this.formatProjectContext(vars.projectContext)}
+
 ## Classification Guidelines
 
 ### Valid Issues (CONFIRM)
@@ -623,34 +558,6 @@ ${vars.scriptsPath}/verify.sh ${vars.gameId} ${vars.findingId} REJECT "Public AP
 ${vars.scriptsPath}/verify.sh ${vars.gameId} ${vars.findingId} REJECT "This is a style preference, code works correctly" style_preference
 \`\`\`
 `;
-	}
-
-	/** Formats project context (key files and anti-patterns) for validation prompts. */
-	private formatProjectContext(
-		context: ProjectContext | null | undefined,
-	): string {
-		if (!context) return "";
-
-		const sections: string[] = [];
-
-		if (context.keyFiles.length > 0) {
-			const files = context.keyFiles
-				.filter((f) => f.readFirst)
-				.map((f) => `- \`${f.path}\` - ${f.purpose}`)
-				.join("\n");
-			if (files) {
-				sections.push(`## Key Files\n${files}`);
-			}
-		}
-
-		if (context.antiPatterns.length > 0) {
-			const patterns = context.antiPatterns
-				.map((p) => `- ❌ ${p.pattern}\n  ✅ ${p.instead}`)
-				.join("\n");
-			sections.push(`## Anti-Patterns to Avoid\n${patterns}`);
-		}
-
-		return sections.length > 0 ? `\n${sections.join("\n\n")}\n` : "";
 	}
 
 	/** Formats scoreboard entries as a markdown table. */

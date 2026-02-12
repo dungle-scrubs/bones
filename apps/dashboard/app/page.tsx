@@ -109,7 +109,7 @@ export default function Home() {
 						</div>
 					</div>
 					<h1 className="font-display text-3xl font-bold uppercase tracking-wider">
-						Code Hunt
+						Bones
 					</h1>
 					<p className="text-sm text-muted-foreground max-w-xs mx-auto">
 						Real-time race visualization for competitive code review games

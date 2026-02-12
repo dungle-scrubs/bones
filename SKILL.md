@@ -1,10 +1,10 @@
 ---
-name: code-hunt
+name: bones
 description: Round-based competitive code review. Configurable hunt prompt - bugs, doc drift, security issues, and more. Hunt → Review → Score until target reached.
 allowed-tools: Task, Read, Bash, Grep, Glob, TodoWrite
 ---
 
-# Code Hunt Game v4
+# Bones Game v4
 
 **Adversarial round-based competition.** Agents hunt for issues (configurable), then attack each other's submissions.
 
@@ -64,7 +64,7 @@ Each category has:
 
 ```
 PLUGIN_ROOT: ~/dev/claude-plugins/games
-SKILL: ${PLUGIN_ROOT}/skills/code-hunt
+SKILL: ${PLUGIN_ROOT}/skills/bones
 CLI: node ${SKILL}/dist/index.js
 ```
 
@@ -77,7 +77,7 @@ The CLI handles all game logic and outputs fully-rendered prompts.
 ### Setup
 
 ```bash
-cd ~/dev/claude-plugins/games/skills/code-hunt
+cd ~/dev/claude-plugins/games/skills/bones
 
 # Default bug hunt
 node dist/index.js setup https://github.com/example/repo
@@ -103,7 +103,7 @@ node dist/index.js setup https://github.com/example/repo \
 Each command returns fully-rendered prompts and next steps.
 
 ```bash
-CLI="node ~/dev/claude-plugins/games/skills/code-hunt/dist/index.js"
+CLI="node ~/dev/claude-plugins/games/skills/bones/dist/index.js"
 
 # 1. HUNT PHASE
 ${CLI} start-hunt "${GAME_ID}"
@@ -222,7 +222,7 @@ Press `q` to exit.
 ## Example Game
 
 ```
-/games:code-hunt --target 10
+/games:bones --target 10
 
 Round 1:
   Hunt: Spawn 3 agents → each finds issues → calls done

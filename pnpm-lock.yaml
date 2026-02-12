@@ -23,9 +23,6 @@ importers:
       react:
         specifier: ^19.2.3
         version: 19.2.3
-      words-hurt:
-        specifier: link:/Users/kevin/dev/primitives
-        version: link:../primitives
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.3.11

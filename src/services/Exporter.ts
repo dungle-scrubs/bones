@@ -80,7 +80,7 @@ export class Exporter {
 		const lines: string[] = [];
 
 		// Header
-		lines.push(`# Code Hunt Results: ${game.id}`);
+		lines.push(`# Bones Results: ${game.id}`);
 		lines.push("");
 		lines.push(`**Project:** ${game.config.projectUrl}`);
 		lines.push(`**Category:** ${game.category}`);

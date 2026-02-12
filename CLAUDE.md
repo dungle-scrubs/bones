@@ -25,7 +25,7 @@ pnpm lint:fix               # Auto-fix
 
 ## Architecture
 
-Code Hunt is a competitive multi-agent code review game. Agents hunt for issues (bugs, security, doc drift, etc.), then review each other's findings. A referee validates findings and resolves disputes.
+Bones is a competitive multi-agent code review game. Agents hunt for issues (bugs, security, doc drift, etc.), then review each other's findings. A referee validates findings and resolves disputes.
 
 ### Game Flow State Machine
 

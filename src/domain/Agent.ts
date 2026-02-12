@@ -1,7 +1,7 @@
 import { type AgentRow, type AgentStats, AgentStatus } from "./types.js";
 
 /**
- * Represents a competing agent in the Code Hunt game.
+ * Represents a competing agent in the Bones game.
  * Tracks the agent's score, statistics, and lifecycle through hunt/review phases.
  * Agents compete by submitting findings and disputing others' findings.
  */
