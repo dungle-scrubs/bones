@@ -18,8 +18,8 @@ import { Type } from "@sinclair/typebox";
  */
 export function createReadFileTool(projectPath: string): AgentTool {
 	return {
-		name: "read_file",
-		label: "Read File",
+		name: "view_file",
+		label: "View File",
 		description:
 			"Read the contents of a file in the target project. Optionally specify a line range.",
 		parameters: Type.Object({
