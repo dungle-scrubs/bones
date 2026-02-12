@@ -23,7 +23,10 @@ export interface AgentRunResult {
 	turnCount: number;
 	totalUsage: Usage;
 	aborted: boolean;
+	abortReason?: "turn_limit" | "timeout" | "external";
 	error?: string;
+	/** Tool calls made during this run, for diagnostics. */
+	toolCalls: Array<{ turn: number; tool: string }>;
 }
 
 /** Callback for receiving agent events during execution. */
@@ -46,7 +49,7 @@ export type AgentEventCallback = (
  * @param options - Optional overrides for thinking level, max turns, and API key
  * @param onEvent - Optional callback for agent events
  * @param signal - Optional AbortSignal for external cancellation
- * @returns AgentRunResult with usage stats
+ * @returns AgentRunResult with usage stats and diagnostics
  */
 export async function runAgent(
 	agentId: string,
@@ -87,20 +90,29 @@ export async function runAgent(
 
 	let turnCount = 0;
 	let aborted = false;
+	let abortReason: AgentRunResult["abortReason"];
 	let error: string | undefined;
+	const toolCalls: AgentRunResult["toolCalls"] = [];
 
 	// Subscribe to events for tracking
 	const unsubscribe = agent.subscribe((event) => {
 		onEvent?.(agentId, role, event);
 
+		// Track tool usage per turn
+		if (event.type === "tool_execution_start") {
+			toolCalls.push({ turn: turnCount + 1, tool: event.toolName });
+		}
+
 		if (event.type === "turn_end") {
 			turnCount++;
 
-			// Accumulate usage from assistant message
+			// Log LLM errors (rate limits, auth failures, etc.)
 			const msg = event.message;
 			if ("role" in msg && msg.role === "assistant" && (msg as any).errorMessage) {
 				console.error(`[${agentId}] LLM error: ${(msg as any).errorMessage}`);
 			}
+
+			// Accumulate usage
 			if ("role" in msg && msg.role === "assistant") {
 				const u = msg.usage;
 				totalUsage.input += u.input;
@@ -119,15 +131,17 @@ export async function runAgent(
 			if (turnCount >= maxTurns) {
 				agent.abort();
 				aborted = true;
+				abortReason = "turn_limit";
 			}
 		}
 	});
 
-	// Handle external abort
+	// Handle external abort (timeout from parent)
 	if (signal) {
 		signal.addEventListener("abort", () => {
 			agent.abort();
 			aborted = true;
+			abortReason = abortReason ?? "timeout";
 		});
 	}
 
@@ -141,5 +155,5 @@ export async function runAgent(
 		unsubscribe();
 	}
 
-	return { agentId, role, turnCount, totalUsage, aborted, error };
+	return { agentId, role, turnCount, totalUsage, aborted, abortReason, error, toolCalls };
 }

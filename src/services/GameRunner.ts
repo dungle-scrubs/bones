@@ -39,74 +39,30 @@ export type GameEvent =
 	| { type: "game_created"; gameId: string; agents: string[] }
 	| { type: "round_start"; round: number }
 	| { type: "hunt_start"; round: number; agentCount: number }
-	| {
-			type: "hunt_agent_done";
-			agentId: string;
-			result: AgentRunResult;
-	  }
+	| { type: "hunt_agent_done"; agentId: string; result: AgentRunResult }
 	| { type: "hunt_end"; round: number }
-	| {
-			type: "scoring_start";
-			round: number;
-			findingCount: number;
-	  }
-	| {
-			type: "finding_validated";
-			findingId: number;
-			verdict: string;
-	  }
+	| { type: "scoring_start"; round: number; findingCount: number }
+	| { type: "finding_validated"; findingId: number; verdict: string }
 	| { type: "scoring_end"; round: number }
-	| {
-			type: "verification_start";
-			count: number;
-	  }
-	| {
-			type: "finding_verified";
-			findingId: number;
-			confirmed: boolean;
-	  }
+	| { type: "verification_start"; count: number }
+	| { type: "finding_verified"; findingId: number; confirmed: boolean }
 	| { type: "verification_end" }
-	| {
-			type: "review_start";
-			round: number;
-			agentCount: number;
-	  }
-	| {
-			type: "review_agent_done";
-			agentId: string;
-			result: AgentRunResult;
-	  }
+	| { type: "review_start"; round: number; agentCount: number }
+	| { type: "review_agent_done"; agentId: string; result: AgentRunResult }
 	| { type: "review_end"; round: number }
-	| {
-			type: "dispute_scoring_start";
-			round: number;
-			disputeCount: number;
-	  }
-	| {
-			type: "dispute_resolved";
-			disputeId: number;
-			verdict: string;
-	  }
+	| { type: "dispute_scoring_start"; round: number; disputeCount: number }
+	| { type: "dispute_resolved"; disputeId: number; verdict: string }
 	| { type: "dispute_scoring_end"; round: number }
-	| {
-			type: "round_complete";
-			round: number;
-			action: string;
-			winner?: string;
-			reason: string;
-	  }
-	| {
-			type: "game_complete";
-			winner: string;
-			reason: string;
-			totalCost: Usage;
-	  }
-	| {
-			type: "agent_event";
-			agentId: string;
-			role: string;
-			event: AgentEvent;
-	  };
+	| { type: "round_complete"; round: number; action: string; winner?: string; reason: string }
+	| { type: "game_complete"; winner: string; reason: string; totalCost: Usage }
+	| { type: "agent_event"; agentId: string; role: string; event: AgentEvent };
+
+/** Per-finding timeout for referee validation (seconds). */
+const REFEREE_TIMEOUT_SECS = 120;
+/** Per-dispute timeout for referee resolution (seconds). */
+const DISPUTE_TIMEOUT_SECS = 90;
+/** Per-finding timeout for verifier (seconds). */
+const VERIFIER_TIMEOUT_SECS = 90;
 
 // ---------------------------------------------------------------------------
 // GameRunner
@@ -120,13 +76,12 @@ export class GameRunner {
 	private orchestrator: Orchestrator;
 	private projectPath: string;
 	private totalCost: Usage;
+	private apiKey?: string;
 
 	/**
 	 * @param orchestrator - Existing Orchestrator with database connection
 	 * @param projectPath - Absolute path to the target project on disk
 	 */
-	private apiKey?: string;
-
 	constructor(orchestrator: Orchestrator, projectPath: string) {
 		this.orchestrator = orchestrator;
 		this.projectPath = projectPath;
@@ -153,11 +108,7 @@ export class GameRunner {
 
 		// 1. Setup
 		const setup = this.orchestrator.setup(config);
-		yield {
-			type: "game_created",
-			gameId: setup.gameId,
-			agents: setup.agents,
-		};
+		yield { type: "game_created", gameId: setup.gameId, agents: setup.agents };
 
 		const gameId = setup.gameId;
 
@@ -167,196 +118,128 @@ export class GameRunner {
 
 			yield { type: "round_start", round: game.round + 1 };
 
-			// 2. Hunt phase — spawn N agents in parallel
+			// ── 2. Hunt phase ──────────────────────────────────────────
 			const huntResult = this.orchestrator.startHunt(gameId);
-			yield {
-				type: "hunt_start",
-				round: huntResult.round,
-				agentCount: huntResult.agents.length,
-			};
+			yield { type: "hunt_start", round: huntResult.round, agentCount: huntResult.agents.length };
 
 			const huntAgentResults = await this.runParallelAgents(
 				huntResult.agents,
 				"hunt",
 				config.agentModel,
 				config.agentThinking,
-				(agentId) =>
-					createHuntTools(this.orchestrator, gameId, agentId, this.projectPath),
+				(agentId) => createHuntTools(this.orchestrator, gameId, agentId, this.projectPath),
 				huntResult.durationSeconds,
 			);
 
 			for (const { agentId, result } of huntAgentResults) {
+				this.logAgentResult(agentId, "hunt", result);
 				yield { type: "hunt_agent_done", agentId, result };
 			}
 
 			yield { type: "hunt_end", round: huntResult.round };
 
-			// 3. Hunt scoring — referee validates findings sequentially
+			// ── 3. Hunt scoring — referee validates each finding ──────
 			const scoringResult = this.orchestrator.startHuntScoring(gameId);
-			yield {
-				type: "scoring_start",
-				round: scoringResult.round,
-				findingCount: scoringResult.pendingFindings,
-			};
+			yield { type: "scoring_start", round: scoringResult.round, findingCount: scoringResult.pendingFindings };
 
 			for (const validation of scoringResult.findingValidations) {
-				const prompt = validation.prompt;
-				const tools = createRefereeValidationTools(
-					this.orchestrator,
-					gameId,
-					this.projectPath,
-				);
-
-				const result = await runAgent(
+				const result = await this.runTimedAgent(
 					`referee-${validation.findingId}`,
 					"referee",
-					"You are a code review referee. Validate findings by reading the actual code and making a verdict.",
-					prompt,
-					tools,
+					"You are a code review referee. Validate findings by reading the actual code and making a verdict. Use the validate_finding tool to submit your verdict.",
+					validation.prompt,
+					createRefereeValidationTools(this.orchestrator, gameId, this.projectPath),
 					refereeModel,
-					{ thinkingLevel: config.refereeThinking, apiKey: this.apiKey },
-					(agentId, role, event) => void 0, // events consumed internally
+					config.refereeThinking,
+					REFEREE_TIMEOUT_SECS,
 				);
 
-				this.accumulateUsage(result.totalUsage);
-				yield {
-					type: "finding_validated",
-					findingId: validation.findingId,
-					verdict: "processed",
-				};
+				this.logAgentResult(`referee-${validation.findingId}`, "referee", result);
+				yield { type: "finding_validated", findingId: validation.findingId, verdict: "processed" };
 			}
 
 			yield { type: "scoring_end", round: scoringResult.round };
 
-			// 4. Verification pass (if any uncertain findings)
+			// ── 4. Verification pass (uncertain findings) ─────────────
 			const pending = this.orchestrator.getPendingVerifications(gameId);
 			if (pending.findings.length > 0) {
 				yield { type: "verification_start", count: pending.findings.length };
 
 				for (const finding of pending.findings) {
-					const prompt = finding.prompt;
-					const tools = createVerifierTools(
-						this.orchestrator,
-						gameId,
-						this.projectPath,
-					);
-
-					const result = await runAgent(
+					const result = await this.runTimedAgent(
 						`verifier-${finding.findingId}`,
 						"verifier",
-						"You are an independent code verifier. Determine if this finding is a valid issue.",
-						prompt,
-						tools,
+						"You are an independent code verifier. Determine if this finding is a valid issue. Use the verify_finding tool to submit your verdict.",
+						finding.prompt,
+						createVerifierTools(this.orchestrator, gameId, this.projectPath),
 						refereeModel,
-						{ thinkingLevel: config.refereeThinking, apiKey: this.apiKey },
+						config.refereeThinking,
+						VERIFIER_TIMEOUT_SECS,
 					);
 
-					this.accumulateUsage(result.totalUsage);
-					yield {
-						type: "finding_verified",
-						findingId: finding.findingId,
-						confirmed: true, // actual result tracked by orchestrator
-					};
+					this.logAgentResult(`verifier-${finding.findingId}`, "verifier", result);
+					yield { type: "finding_verified", findingId: finding.findingId, confirmed: true };
 				}
 
 				yield { type: "verification_end" };
 			}
 
-			// 5. Review phase — spawn N agents in parallel
+			// ── 5. Review phase — dispute other agents' findings ──────
 			const reviewResult = this.orchestrator.startReview(gameId);
-			yield {
-				type: "review_start",
-				round: reviewResult.round,
-				agentCount: reviewResult.agents.length,
-			};
+			yield { type: "review_start", round: reviewResult.round, agentCount: reviewResult.agents.length };
 
 			const reviewAgentResults = await this.runParallelAgents(
 				reviewResult.agents,
 				"review",
 				config.agentModel,
 				config.agentThinking,
-				(agentId) =>
-					createReviewTools(
-						this.orchestrator,
-						gameId,
-						agentId,
-						this.projectPath,
-					),
+				(agentId) => createReviewTools(this.orchestrator, gameId, agentId, this.projectPath),
 				reviewResult.durationSeconds,
 			);
 
 			for (const { agentId, result } of reviewAgentResults) {
+				this.logAgentResult(agentId, "review", result);
 				yield { type: "review_agent_done", agentId, result };
 			}
 
 			yield { type: "review_end", round: reviewResult.round };
 
-			// 6. Review scoring — referee resolves disputes
+			// ── 6. Review scoring — referee resolves disputes ─────────
 			const disputeResult = this.orchestrator.startReviewScoring(gameId);
-			yield {
-				type: "dispute_scoring_start",
-				round: disputeResult.round,
-				disputeCount: disputeResult.pendingDisputes,
-			};
+			yield { type: "dispute_scoring_start", round: disputeResult.round, disputeCount: disputeResult.pendingDisputes };
 
 			for (const resolution of disputeResult.disputeResolutions) {
-				const prompt = resolution.prompt;
-				const tools = createRefereeResolutionTools(
-					this.orchestrator,
-					gameId,
-					this.projectPath,
-				);
-
-				const result = await runAgent(
+				const result = await this.runTimedAgent(
 					`referee-dispute-${resolution.disputeId}`,
 					"referee",
-					"You are a code review referee. Resolve this dispute by reading the code and determining who is correct.",
-					prompt,
-					tools,
+					"You are a code review referee. Resolve this dispute by reading the code and determining who is correct. Use the resolve_dispute tool to submit your verdict.",
+					resolution.prompt,
+					createRefereeResolutionTools(this.orchestrator, gameId, this.projectPath),
 					refereeModel,
-					{ thinkingLevel: config.refereeThinking, apiKey: this.apiKey },
+					config.refereeThinking,
+					DISPUTE_TIMEOUT_SECS,
 				);
 
-				this.accumulateUsage(result.totalUsage);
-				yield {
-					type: "dispute_resolved",
-					disputeId: resolution.disputeId,
-					verdict: "processed",
-				};
+				this.logAgentResult(`referee-dispute-${resolution.disputeId}`, "referee", result);
+				yield { type: "dispute_resolved", disputeId: resolution.disputeId, verdict: "processed" };
 			}
 
-			yield {
-				type: "dispute_scoring_end",
-				round: disputeResult.round,
-			};
+			yield { type: "dispute_scoring_end", round: disputeResult.round };
 
-			// 7. Check winner
+			// ── 7. Check winner ───────────────────────────────────────
 			const winner = this.orchestrator.checkWinner(gameId);
-			yield {
-				type: "round_complete",
-				round: disputeResult.round,
-				action: winner.action,
-				winner: winner.winner,
-				reason: winner.reason,
-			};
+			yield { type: "round_complete", round: disputeResult.round, action: winner.action, winner: winner.winner, reason: winner.reason };
 
 			if (winner.action === "GAME_COMPLETE") {
-				yield {
-					type: "game_complete",
-					winner: winner.winner!,
-					reason: winner.reason,
-					totalCost: this.totalCost,
-				};
+				yield { type: "game_complete", winner: winner.winner!, reason: winner.reason, totalCost: this.totalCost };
 				break;
 			}
-			// CONTINUE or TIE_BREAKER — loop back to hunt
 		}
 	}
 
 	/**
 	 * Runs multiple agents in parallel with a shared timeout.
 	 * Uses Promise.allSettled so one failure doesn't kill the others.
-	 * Collects results for the caller to yield as events.
 	 *
 	 * @returns Completed agent results (excludes failures)
 	 */
@@ -373,23 +256,13 @@ export class GameRunner {
 
 		try {
 			const promises = agents.map(async (a) => {
-				const prompt = a.prompt;
 				const tools = createTools(a.agentId);
 
 				const result = await runAgent(
 					a.agentId,
 					role,
-					`You are a Bones competitive code review agent. Your agent ID is ${a.agentId}.
-
-IMPORTANT: You have exactly these tools — use ONLY these:
-- view_file: Read file contents (with optional start_line/end_line)
-- search_code: Grep the codebase for patterns
-- submit_finding: Submit a bug (hunt phase) / submit_dispute: Challenge a finding (review phase)
-- mark_done: Signal you are finished
-
-Do NOT use Read, Write, Edit, Bash, Grep, or Glob — those are disabled and do nothing.
-Submit findings AS YOU FIND THEM. Do not wait.`,
-					prompt,
+					this.buildAgentSystemPrompt(a.agentId),
+					a.prompt,
 					tools,
 					model,
 					{ thinkingLevel, apiKey: this.apiKey },
@@ -409,9 +282,7 @@ Submit findings AS YOU FIND THEM. Do not wait.`,
 				if (outcome.status === "fulfilled") {
 					completed.push(outcome.value);
 				} else {
-					console.error(
-						`[${role}] agent ${agents[i].agentId} failed: ${outcome.reason}`,
-					);
+					console.error(`[${role}] agent ${agents[i].agentId} failed: ${outcome.reason}`);
 				}
 			}
 
@@ -421,7 +292,98 @@ Submit findings AS YOU FIND THEM. Do not wait.`,
 		}
 	}
 
+	/**
+	 * Runs a single agent with its own AbortController and timeout.
+	 * Used for referee and verifier where each run is independent.
+	 *
+	 * @param agentId - Agent identifier for logging
+	 * @param role - Agent role
+	 * @param systemPrompt - System prompt
+	 * @param userPrompt - Task prompt
+	 * @param tools - Available tools
+	 * @param model - LLM model
+	 * @param thinkingLevel - Thinking budget
+	 * @param timeoutSecs - Max seconds before abort
+	 * @returns Agent run result
+	 */
+	private async runTimedAgent(
+		agentId: string,
+		role: string,
+		systemPrompt: string,
+		userPrompt: string,
+		tools: any[],
+		model: Model<any>,
+		thinkingLevel: ThinkingLevel | undefined,
+		timeoutSecs: number,
+	): Promise<AgentRunResult> {
+		const controller = new AbortController();
+		const timeout = setTimeout(() => controller.abort(), timeoutSecs * 1000);
 
+		try {
+			const result = await runAgent(
+				agentId,
+				role,
+				systemPrompt,
+				userPrompt,
+				tools,
+				model,
+				{ thinkingLevel, apiKey: this.apiKey },
+				undefined,
+				controller.signal,
+			);
+
+			this.accumulateUsage(result.totalUsage);
+			return result;
+		} finally {
+			clearTimeout(timeout);
+		}
+	}
+
+	/**
+	 * Builds the system prompt for hunt/review agents.
+	 * Explicitly lists real tools and tells agents to ignore CC shims.
+	 *
+	 * @param agentId - Agent's identifier
+	 * @returns System prompt string
+	 */
+	private buildAgentSystemPrompt(agentId: string): string {
+		return `You are a Bones competitive code review agent. Your agent ID is ${agentId}.
+
+IMPORTANT: You have exactly these tools — use ONLY these:
+- view_file: Read file contents (with optional start_line/end_line)
+- search_code: Grep the codebase for patterns
+- submit_finding: Submit a bug (hunt phase) / submit_dispute: Challenge a finding (review phase)
+- mark_done: Signal you are finished
+
+Do NOT use Read, Write, Edit, Bash, Grep, or Glob — those are disabled and do nothing.
+Submit findings AS YOU FIND THEM. Do not wait.`;
+	}
+
+	/**
+	 * Logs agent result summary to stderr for CLI visibility.
+	 *
+	 * @param agentId - Agent identifier
+	 * @param role - Agent role
+	 * @param result - Completed agent result
+	 */
+	private logAgentResult(agentId: string, role: string, result: AgentRunResult): void {
+		const cost = `$${result.totalUsage.cost.total.toFixed(4)}`;
+		const abort = result.aborted ? ` aborted=${result.abortReason ?? "unknown"}` : "";
+		const err = result.error ? ` error=${result.error}` : "";
+
+		// Summarize tool usage
+		const toolCounts = new Map<string, number>();
+		for (const tc of result.toolCalls) {
+			toolCounts.set(tc.tool, (toolCounts.get(tc.tool) ?? 0) + 1);
+		}
+		const toolSummary = Array.from(toolCounts.entries())
+			.map(([name, count]) => `${name}=${count}`)
+			.join(" ");
+
+		console.error(
+			`[${agentId}] turns=${result.turnCount} cost=${cost}${abort}${err}${toolSummary ? ` tools=[${toolSummary}]` : ""}`,
+		);
+	}
 
 	/**
 	 * Accumulates token usage from an agent run into the game total.
