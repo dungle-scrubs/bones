@@ -200,7 +200,7 @@ export class GameRunner {
 			};
 
 			for (const validation of scoringResult.findingValidations) {
-				const prompt = this.stripShellCommands(validation.prompt);
+				const prompt = validation.prompt;
 				const tools = createRefereeValidationTools(
 					this.orchestrator,
 					gameId,
@@ -234,7 +234,7 @@ export class GameRunner {
 				yield { type: "verification_start", count: pending.findings.length };
 
 				for (const finding of pending.findings) {
-					const prompt = this.stripShellCommands(finding.prompt);
+					const prompt = finding.prompt;
 					const tools = createVerifierTools(
 						this.orchestrator,
 						gameId,
@@ -300,7 +300,7 @@ export class GameRunner {
 			};
 
 			for (const resolution of disputeResult.disputeResolutions) {
-				const prompt = this.stripShellCommands(resolution.prompt);
+				const prompt = resolution.prompt;
 				const tools = createRefereeResolutionTools(
 					this.orchestrator,
 					gameId,
@@ -373,7 +373,7 @@ export class GameRunner {
 
 		try {
 			const promises = agents.map(async (a) => {
-				const prompt = this.stripShellCommands(a.prompt);
+				const prompt = a.prompt;
 				const tools = createTools(a.agentId);
 
 				const result = await runAgent(
@@ -412,17 +412,7 @@ export class GameRunner {
 		}
 	}
 
-	/**
-	 * Strips shell command sections from prompts.
-	 * Agents use tools instead of shell scripts, so command blocks are noise.
-	 */
-	private stripShellCommands(prompt: string): string {
-		// Remove ## Commands / ## Command sections with their code blocks
-		return prompt.replace(
-			/## (?:Commands?)\n```bash[\s\S]*?```\n?/g,
-			"## Actions\nUse the available tools to take actions.\n",
-		);
-	}
+
 
 	/**
 	 * Accumulates token usage from an agent run into the game total.

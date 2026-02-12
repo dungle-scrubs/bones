@@ -24,7 +24,7 @@ export interface HuntPromptVars {
 	scoreboard: ScoreboardEntry[];
 	yourScore: number;
 	scriptsPath: string;
-	existingFindings: Finding[]; // Validated findings from previous rounds
+	existingFindings: Finding[];
 }
 
 /** Variables needed to render a review phase prompt for an agent. */
@@ -93,12 +93,13 @@ export interface VerificationPromptVars {
 
 /**
  * Generates markdown prompts for agents and referee during game phases.
- * Prompts include game context, instructions, scoring info, and CLI commands.
+ * All prompts reference tool names (submit_finding, view_file, etc.)
+ * rather than shell scripts.
  */
 export class PromptRenderer {
 	/**
 	 * Generates the hunt phase prompt for an agent.
-	 * Includes penalty warnings, existing findings, and submission commands.
+	 * Tells the agent to use submit_finding and mark_done tools.
 	 */
 	renderHunt(vars: HuntPromptVars): string {
 		const scoreboard = this.formatScoreboard(vars.scoreboard);
@@ -107,126 +108,112 @@ export class PromptRenderer {
 		);
 		const acceptanceCriteria = formatAcceptanceCriteria(vars.category) || "";
 
-		return `# Bones - Round ${vars.round}
+		return `# Bones — Hunt Phase, Round ${vars.round}
 
-## ⚠️ PENALTY WARNING - READ THIS FIRST
-| Outcome | Points | What it means |
-|---------|--------|---------------|
-| Valid finding | **+1** | Confirmed real issue |
-| False positive | **-2** | You lose 2 points - wipes out 2 valid findings |
-| Duplicate | **-3** | You lose 3 points - wipes out 3 valid findings |
+## ⚠️ PENALTY WARNING
+| Outcome | Points |
+|---------|--------|
+| Valid finding | **+1** |
+| False positive | **-2** |
+| Duplicate | **-3** |
 
-**STOP AND THINK:** Is this finding worth the risk? One mistake costs more than multiple successes.
+One false positive wipes out two valid findings. Be certain before submitting.
 
-## Game Info
-- **Game ID:** ${vars.gameId}
-- **Your Agent ID:** ${vars.agentId}
+## Game State
+- **Game:** ${vars.gameId}
+- **You:** ${vars.agentId}
 - **Category:** ${vars.category}
 - **Target Score:** ${vars.targetScore}
-- **Phase Ends:** ${vars.phaseEndsAt}
-- **Project:** ${vars.projectUrl}
 - **Your Score:** ${vars.yourScore}
+- **Project:** ${vars.projectUrl}
 
-## 🚫 ALREADY FOUND - DO NOT RESUBMIT
-These issues have already been validated. Submitting any of these = **-3 points**.
+## Scoreboard
+${scoreboard}
+
+## Already Found — DO NOT RESUBMIT
+These are validated. Resubmitting = **-3 points**.
 ${existingFindingsList}
 
-## Your Mission
+## Mission
 ${vars.huntPrompt}
 
 ${acceptanceCriteria}
 
-## Commands
-\`\`\`bash
-# Submit a finding${vars.category === "doc_drift" ? " (snippet REQUIRED for doc_drift)" : ""}
-${vars.scriptsPath}/submit.sh ${vars.gameId} ${vars.agentId} <file_path> <line_start> <line_end> "<description>"${vars.category === "doc_drift" ? ' "<snippet>"' : ""}
+## How to Play
 
-# Mark hunt complete
-${vars.scriptsPath}/done.sh ${vars.gameId} ${vars.agentId} hunt
-\`\`\`${
-			vars.category === "doc_drift"
-				? `
+You have these tools:
 
-## ⚠️ REQUIRED EVIDENCE FORMAT (doc_drift)
-Every submission MUST include a snippet with this exact format:
+1. **view_file** — Read file contents (with optional line range)
+2. **search_code** — Grep the codebase for patterns
+3. **submit_finding** — Submit a bug with file_path, line_start, line_end, description${vars.category === "doc_drift" ? ", and code_snippet (REQUIRED)" : ""}
+4. **mark_done** — Signal you're finished hunting
+
+**Strategy:** Read code → find real issues → submit each one → mark done when finished.
+Submit findings AS YOU FIND THEM. Don't wait until the end.
+${
+	vars.category === "doc_drift"
+		? `
+## Evidence Format (doc_drift — REQUIRED)
+Every submission MUST include a code_snippet with this format:
 \`\`\`
-DOC: <exact quote from documentation file>
-CODE: <actual code behavior with file:line reference>
-CONTRADICTION: <specific mismatch explanation>
+DOC: <exact quote from documentation>
+CODE: <actual code behavior with file:line>
+CONTRADICTION: <specific mismatch>
 \`\`\`
-
-**Before submitting:**
-1. Read the documentation file to get the EXACT text
-2. Read the code file to verify the ACTUAL behavior
-3. Include both in your snippet - the referee will verify both
-
-Submissions without proper evidence will be rejected.`
-				: ""
-		}
-
-## Current Scoreboard
-${scoreboard}
-
-**Remember: 3 valid findings + 1 duplicate = NET ZERO. Quality over quantity.**
+`
+		: ""
+}
+**Quality over quantity. 3 valid + 1 duplicate = NET ZERO.**
 `;
 	}
 
 	/**
 	 * Generates the review phase prompt for an agent.
-	 * Lists valid findings from other agents that can be disputed.
+	 * Tells the agent to use submit_dispute and mark_done tools.
 	 */
 	renderReview(vars: ReviewPromptVars): string {
 		const scoreboard = this.formatScoreboard(vars.scoreboard);
 		const findings = this.formatFindings(vars.findings);
 
-		return `# Bones - Review Phase - Round ${vars.round}
+		return `# Bones — Review Phase, Round ${vars.round}
 
-## Game Info
-- **Game ID:** ${vars.gameId}
-- **Your Agent ID:** ${vars.agentId}
+## Game State
+- **Game:** ${vars.gameId}
+- **You:** ${vars.agentId}
 - **Target Score:** ${vars.targetScore}
-- **Phase Ends:** ${vars.phaseEndsAt}
+- **Your Score:** ${vars.yourScore}
 - **Project:** ${vars.projectUrl}
 
-## Your Mission
-Review the validated findings below. If you believe any finding is invalid or incorrect, file a dispute with your reasoning.
+## Scoreboard
+${scoreboard}
 
 ## Findings to Review
 ${findings}
 
-## Current Scoreboard
-${scoreboard}
+## How to Play
 
-**Your Score:** ${vars.yourScore}
+You have these tools:
 
-## Instructions
-1. Review each finding carefully
-2. Check the actual code at the specified location
-3. If a finding is incorrect, file a dispute
-4. Call done when finished reviewing
+1. **view_file** — Read file contents to verify claims
+2. **search_code** — Search the codebase
+3. **submit_dispute** — Challenge a finding with finding_id and reason
+4. **mark_done** — Signal you're finished reviewing
 
-## Commands
-\`\`\`bash
-# Dispute a finding
-${vars.scriptsPath}/dispute.sh ${vars.gameId} ${vars.agentId} <finding_id> "<reason>"
+**Strategy:** For each finding, read the actual code at the referenced location.
+If the finding is wrong, dispute it. Successful disputes earn **+2**, failed disputes cost **-1**.
 
-# Mark review complete
-${vars.scriptsPath}/done.sh ${vars.gameId} ${vars.agentId} review
-\`\`\`
-
-Successful disputes earn points. Failed disputes cost points.
+Call **mark_done** when finished.
 `;
 	}
 
 	/**
 	 * Generates a finding validation prompt for the referee.
-	 * Includes category-specific criteria, edge cases, and classification guidance.
+	 * Tells the referee to use validate_finding tool.
 	 */
 	renderFindingValidation(vars: FindingValidationVars): string {
 		const criteria = ACCEPTANCE_CRITERIA[vars.category];
 		const edgeCaseSection = this.formatEdgeCasesForReferee(vars.category);
 
-		// doc_drift gets a specialized verification prompt
 		if (vars.category === "doc_drift") {
 			return this.renderDocDriftValidation(vars, criteria, edgeCaseSection);
 		}
@@ -243,11 +230,11 @@ Successful disputes earn points. Failed disputes cost points.
 
 		return `# Finding Validation
 
-## Finding Details
-- **Finding ID:** ${vars.findingId}
-- **Submitted by:** ${vars.agentId}
+## Finding
+- **ID:** ${vars.findingId}
+- **By:** ${vars.agentId}
 - **File:** ${vars.filePath}
-- **Lines:** ${vars.lineStart}-${vars.lineEnd}
+- **Lines:** ${vars.lineStart}–${vars.lineEnd}
 - **Category:** ${vars.category}
 
 ## Description
@@ -255,79 +242,44 @@ ${vars.description}
 
 ${vars.codeSnippet ? `## Code Snippet\n\`\`\`\n${vars.codeSnippet}\n\`\`\`` : ""}
 
-## Validation Rules for ${vars.category.toUpperCase()}
+## Validation Rules (${vars.category})
 
-### Finding must demonstrate:
+### Must demonstrate:
 ${criteria?.mustShow.map((s) => `- ${s}`).join("\n") || "- Specific issue with clear evidence"}
 
-### Automatic FALSE (reject these):
+### Automatic FALSE:
 ${criteria?.autoReject.map((s) => `- ${s}`).join("\n") || "- Speculative issues without evidence"}
 
 ${edgeCaseSection}
 
 ## Task
-Read the actual code at ${vars.projectUrl}. Navigate to ${vars.filePath}:${vars.lineStart}-${vars.lineEnd}.
+Use **view_file** to read ${vars.filePath} lines ${vars.lineStart}–${vars.lineEnd}. Evaluate the finding.
 
-Evaluate against the criteria above. This is STATIC ANALYSIS - no code execution.
-The claim cannot be "verified", only evaluated for logical soundness.
+This is STATIC ANALYSIS — no code execution. Evaluate logical soundness only.
 
-## Verdict Guidelines
-- **VALID** = Finding demonstrates the issue with sufficient evidence per criteria above
-- **FALSE** = Finding fails to meet criteria OR is an auto-reject case
-- **DUPLICATE** = Same issue already reported (provide duplicate_of_id)
+## Verdicts
+- **VALID** — Issue is real and meets criteria
+- **FALSE** — Fails criteria or is an auto-reject case
+- **DUPLICATE** — Same issue already reported (set duplicate_of_id)
 
 ## Classification
 
-### For VALID findings:
+**For VALID findings:**
+- confidence_score (0–100): 90+ obvious, 70–89 needs context, 50–69 assumption-dependent, <50 likely FALSE
+- issue_type: ${issueTypeList}
+- impact_tier: \`critical\` | \`major\` | \`minor\`
+- needs_verification: true if confidence < 70
 
-**Confidence Score (0-100):**
-- **90-100**: Issue is obvious from code, no assumptions needed
-- **70-89**: Issue is sound but requires understanding context
-- **50-69**: Issue depends on runtime assumptions, should verify
-- **<50**: Too speculative, likely FALSE
+**For FALSE findings:**
+- rejection_reason: ${rejectionReasons}
 
-**Issue Type** (what kind of issue): ${issueTypeList}
-
-**Impact Tier** (how severe):
-- \`critical\`: Data corruption, security breach, crash
-- \`major\`: Wrong output, resource leak, degraded functionality
-- \`minor\`: Edge case, cosmetic, minimal impact
-
-**Needs Verification:** Set true if confidence < 70 or claim depends on unverifiable assumptions
-
-### For FALSE findings:
-
-**Rejection Reason** (why invalid): ${rejectionReasons}
-- \`defensive_suggestion\`: "Add validation" where code works correctly
-- \`unreachable_path\`: Issue can't be reached through public API
-- \`already_guarded\`: Validation exists elsewhere
-- \`speculative\`: "Could fail if..." without showing trigger
-- \`prevented_by_system\`: Type system or framework prevents issue
-- \`misanalyzed_source\`: Agent misread the code
-
-## Command
-\`\`\`bash
-# VALID finding:
-${vars.scriptsPath}/validate.sh ${vars.gameId} ${vars.findingId} VALID "<explanation>" <confidence_score> <issue_type> <impact_tier> <needs_verification>
-
-# FALSE finding:
-${vars.scriptsPath}/validate.sh ${vars.gameId} ${vars.findingId} FALSE "<explanation>" <confidence_score> <rejection_reason>
-
-# DUPLICATE:
-${vars.scriptsPath}/validate.sh ${vars.gameId} ${vars.findingId} DUPLICATE "<explanation>" <duplicate_of_id>
-
-# Examples:
-# Clear valid: validate.sh game-123 45 VALID "Null pointer when X is empty" 95 logic_error critical false
-# Needs review: validate.sh game-123 46 VALID "Missing check could cause Y" 65 missing_validation major true
-# False - defensive: validate.sh game-123 47 FALSE "Internal API already validates at boundary" 85 defensive_suggestion
-# Duplicate: validate.sh game-123 48 DUPLICATE "Same issue as #42" 42
-\`\`\`
+Use the **validate_finding** tool with your verdict.
 `;
 	}
 
 	/**
 	 * Specialized validation prompt for doc_drift findings.
-	 * Requires the referee to independently verify both documentation and code claims.
+	 * Requires independent verification of both doc and code claims.
 	 */
 	private renderDocDriftValidation(
 		vars: FindingValidationVars,
@@ -336,67 +288,43 @@ ${vars.scriptsPath}/validate.sh ${vars.gameId} ${vars.findingId} DUPLICATE "<exp
 	): string {
 		return `# Documentation Drift Verification
 
-**You are a VERIFIER, not an evaluator.** Your job is to independently confirm the evidence.
+**You are a VERIFIER.** Independently confirm the evidence.
 
-## Finding Details
-- **Finding ID:** ${vars.findingId}
-- **Submitted by:** ${vars.agentId}
-- **Documentation File:** ${vars.filePath}
-- **Lines:** ${vars.lineStart}-${vars.lineEnd}
+## Finding
+- **ID:** ${vars.findingId}
+- **By:** ${vars.agentId}
+- **Doc File:** ${vars.filePath}
+- **Lines:** ${vars.lineStart}–${vars.lineEnd}
 
-## Agent's Claimed Evidence
-${vars.codeSnippet ? `\`\`\`\n${vars.codeSnippet}\n\`\`\`` : "*No evidence snippet provided - AUTOMATIC FALSE*"}
+## Agent's Evidence
+${vars.codeSnippet ? `\`\`\`\n${vars.codeSnippet}\n\`\`\`` : "*No evidence provided — AUTOMATIC FALSE*"}
 
 ## Description
 ${vars.description}
 
-## ⚠️ VERIFICATION REQUIRED - DO NOT TRUST CLAIMS
+## Verification Steps
 
-You MUST independently verify both sides of the claimed contradiction:
+1. **Verify docs:** Use **view_file** to read ${vars.filePath}:${vars.lineStart}–${vars.lineEnd}. Does the quoted DOC text match?
+2. **Verify code:** Read the referenced code file. Does it behave as the agent's CODE claim says?
+3. **Assess contradiction:** Is there a real contradiction that would mislead a user?
 
-### Step 1: Verify the Documentation Claim
-Read the actual documentation at ${vars.filePath}:${vars.lineStart}-${vars.lineEnd}
-
-- Does the file exist?
-- Do lines ${vars.lineStart}-${vars.lineEnd} contain what the agent quoted in "DOC:"?
-- Quote the ACTUAL text you find
-
-### Step 2: Verify the Code Claim
-The agent's description should reference a code file showing contrary behavior.
-
-- Read the code file referenced
-- Does the code actually do what the agent claims in "CODE:"?
-- Quote the ACTUAL code behavior
-
-### Step 3: Assess Contradiction
-Only if BOTH verifications match the agent's claims:
-- Is there a real contradiction that would mislead a user?
-- Or is the doc just incomplete/imprecise without being wrong?
-
-## Validation Rules
-
-### Finding must demonstrate:
+### Must demonstrate:
 ${criteria?.mustShow.map((s: string) => `- ${s}`).join("\n") || "- Specific issue with clear evidence"}
 
-### Automatic FALSE (reject these):
+### Automatic FALSE:
 ${criteria?.autoReject.map((s: string) => `- ${s}`).join("\n") || "- Speculative issues without evidence"}
-- Agent's quoted text doesn't match actual file content
-- Code reference missing or doesn't support the claim
+- Agent's quoted text doesn't match actual file
+- Code reference missing or doesn't support claim
 - No evidence snippet provided
 
 ${edgeCaseSection}
 
-## Verdict Guidelines
-- **VALID** = You verified both DOC and CODE match agent's claims AND there's a real contradiction
-- **FALSE** = Agent's evidence doesn't match reality OR no real contradiction exists
-- **DUPLICATE** = Same contradiction already reported (provide duplicate_of_id)
+## Verdicts
+- **VALID** — Both DOC and CODE verified, real contradiction exists
+- **FALSE** — Evidence doesn't match reality or no real contradiction
+- **DUPLICATE** — Same contradiction already reported (set duplicate_of_id)
 
-**CRITICAL:** If you cannot find the quoted text at the specified location, the finding is FALSE regardless of whether a similar issue exists elsewhere.
-
-## Command
-\`\`\`bash
-${vars.scriptsPath}/validate.sh ${vars.gameId} ${vars.findingId} <VALID|FALSE|DUPLICATE> "<explanation>" [high|medium|low] [duplicate_of_id]
-\`\`\`
+Use the **validate_finding** tool with your verdict.
 `;
 	}
 
@@ -405,7 +333,7 @@ ${vars.scriptsPath}/validate.sh ${vars.gameId} ${vars.findingId} <VALID|FALSE|DU
 		const criteria = ACCEPTANCE_CRITERIA[category];
 		if (!criteria?.edgeCases.length) return "";
 
-		const lines: string[] = ["### Edge Case Rulings (apply these):", ""];
+		const lines: string[] = ["### Edge Case Rulings:", ""];
 
 		const grouped = new Map<string, { valid: string[]; invalid: string[] }>();
 		for (const edge of criteria.edgeCases) {
@@ -434,12 +362,12 @@ ${vars.scriptsPath}/validate.sh ${vars.gameId} ${vars.findingId} <VALID|FALSE|DU
 
 	/**
 	 * Generates a dispute resolution prompt for the referee.
-	 * Shows the original finding, dispute reason, and asks for a verdict.
+	 * Tells the referee to use resolve_dispute tool.
 	 */
 	renderDisputeResolution(vars: DisputeResolutionVars): string {
 		return `# Dispute Resolution
 
-## Dispute Details
+## Dispute
 - **Dispute ID:** ${vars.disputeId}
 - **Finding ID:** ${vars.findingId}
 - **Disputer:** ${vars.disputerId}
@@ -447,7 +375,7 @@ ${vars.scriptsPath}/validate.sh ${vars.gameId} ${vars.findingId} <VALID|FALSE|DU
 
 ## Original Finding
 - **File:** ${vars.filePath}
-- **Lines:** ${vars.lineStart}-${vars.lineEnd}
+- **Lines:** ${vars.lineStart}–${vars.lineEnd}
 - **Description:** ${vars.findingDescription}
 
 ${vars.codeSnippet ? `## Code Snippet\n\`\`\`\n${vars.codeSnippet}\n\`\`\`` : ""}
@@ -456,28 +384,18 @@ ${vars.codeSnippet ? `## Code Snippet\n\`\`\`\n${vars.codeSnippet}\n\`\`\`` : ""
 ${vars.disputeReason}
 
 ## Task
-Resolve this dispute. Determine if the disputer is correct.
+1. Use **view_file** to read the code at ${vars.filePath}:${vars.lineStart}–${vars.lineEnd}
+2. Evaluate the original finding against the dispute
+3. Use the **resolve_dispute** tool with your verdict
 
-## Instructions
-1. Review the original finding
-2. Evaluate the dispute reason
-3. Check the actual code
-4. Determine if the dispute is valid
-
-## Command
-\`\`\`bash
-# Submit resolution
-${vars.scriptsPath}/resolve.sh ${vars.gameId} ${vars.disputeId} <SUCCESSFUL|FAILED> "<explanation>"
-\`\`\`
-
-SUCCESSFUL = Disputer was right, finding is invalid
-FAILED = Finding was correct, dispute fails
+**SUCCESSFUL** = Disputer was right, finding is invalid
+**FAILED** = Finding was correct, dispute fails
 `;
 	}
 
 	/**
-	 * Generates a verification prompt for findings that need a second opinion.
-	 * Verifier independently analyzes whether the finding is a valid issue.
+	 * Generates a verification prompt for findings needing a second opinion.
+	 * Tells the verifier to use verify_finding tool.
 	 */
 	renderVerificationPrompt(vars: VerificationPromptVars): string {
 		const issueTypes = ISSUE_TYPES_BY_CATEGORY[vars.category];
@@ -492,18 +410,18 @@ FAILED = Finding was correct, dispute fails
 
 		return `# Finding Verification
 
-**You are an INDEPENDENT VERIFIER.** Your job is to determine if this finding represents a valid issue.
+**You are an INDEPENDENT VERIFIER.**
 
-## Finding Details
-- **Finding ID:** ${vars.findingId}
-- **Original Submitter:** ${vars.agentId}
+## Finding
+- **ID:** ${vars.findingId}
+- **By:** ${vars.agentId}
 - **File:** ${vars.filePath}
-- **Lines:** ${vars.lineStart}-${vars.lineEnd}
+- **Lines:** ${vars.lineStart}–${vars.lineEnd}
 - **Category:** ${vars.category}
 - **Initial Confidence:** ${vars.confidenceScore}/100
 - **Initial Issue Type:** ${vars.issueType ?? "unknown"}
 
-## Original Finding Description
+## Description
 ${vars.description}
 
 ${vars.codeSnippet ? `## Code Snippet\n\`\`\`\n${vars.codeSnippet}\n\`\`\`` : ""}
@@ -511,58 +429,32 @@ ${vars.codeSnippet ? `## Code Snippet\n\`\`\`\n${vars.codeSnippet}\n\`\`\`` : ""
 ## Original Referee Assessment
 ${vars.originalVerdict}
 
-## Your Task
+## Task
 
-The initial referee was uncertain about this finding. You must independently verify:
+The initial referee was uncertain. Independently verify:
 
-1. **Read the actual code** at ${vars.projectUrl}
-2. Navigate to ${vars.filePath}:${vars.lineStart}-${vars.lineEnd}
-3. Determine if the claimed issue is real
-
-## Classification Guidelines
+1. Use **view_file** to read ${vars.filePath}:${vars.lineStart}–${vars.lineEnd}
+2. Determine if the claimed issue is real
 
 ### Valid Issues (CONFIRM)
-- Causes wrong output, data corruption, crashes
+- Wrong output, data corruption, crashes
 - Security vulnerability with exploit path
-- Logic error that produces wrong results
+- Logic error producing wrong results
 - Race condition with realistic trigger
 - Documentation contradicts actual behavior
 
-### Invalid - Reject Reasons (REJECT)
-- **defensive_suggestion**: Suggests adding validation that isn't strictly necessary
-- **unreachable_path**: Issue can't be reached through public API
-- **already_guarded**: Boundary validation already exists at public API
-- **speculative**: "Could fail if..." without showing how caller triggers it
-- **style_preference**: Style preference, naming convention, "better practice" without correctness impact
-- **misanalyzed_source**: Agent misread the code
+### Invalid (REJECT) — reasons:
+${rejectionReasons.split(", ").map((r) => `- ${r}`).join("\n")}
 
-## Command
-\`\`\`bash
-# CONFIRM - it's a valid issue:
-${vars.scriptsPath}/verify.sh ${vars.gameId} ${vars.findingId} CONFIRM "<explanation>" [corrected_issue_type]
-
-# REJECT - it's not valid:
-${vars.scriptsPath}/verify.sh ${vars.gameId} ${vars.findingId} REJECT "<explanation>" <rejection_reason>
-
-# Issue types: ${issueTypeList}
-# Rejection reasons: ${rejectionReasons}
-
-# Examples:
-# Confirm:
-${vars.scriptsPath}/verify.sh ${vars.gameId} ${vars.findingId} CONFIRM "Verified: null pointer occurs when X is empty" logic_error
-
-# Reject as defensive:
-${vars.scriptsPath}/verify.sh ${vars.gameId} ${vars.findingId} REJECT "Public API validates at line 42" defensive_suggestion
-
-# Reject as style:
-${vars.scriptsPath}/verify.sh ${vars.gameId} ${vars.findingId} REJECT "This is a style preference, code works correctly" style_preference
-\`\`\`
+Use the **verify_finding** tool:
+- **CONFIRM** with explanation (and optional corrected issue_type: ${issueTypeList})
+- **REJECT** with explanation and rejection_reason
 `;
 	}
 
 	/** Formats scoreboard entries as a markdown table. */
 	private formatScoreboard(entries: ScoreboardEntry[]): string {
-		if (entries.length === 0) return "_No agents yet_";
+		if (entries.length === 0) return "_No scores yet_";
 
 		const header = "| Rank | Agent | Score | Valid | False | Dup | Disputes |";
 		const separator =
@@ -584,7 +476,7 @@ ${vars.scriptsPath}/verify.sh ${vars.gameId} ${vars.findingId} REJECT "This is a
 			.map(
 				(f) => `### Finding #${f.id}
 - **File:** ${f.filePath}
-- **Lines:** ${f.lineStart}-${f.lineEnd}
+- **Lines:** ${f.lineStart}–${f.lineEnd}
 - **By:** ${f.agentId}
 - **Description:** ${f.description}
 `,
@@ -594,9 +486,8 @@ ${vars.scriptsPath}/verify.sh ${vars.gameId} ${vars.findingId} REJECT "This is a
 
 	/** Formats existing findings grouped by file to warn agents of duplicates. */
 	private formatExistingFindings(findings: Finding[]): string {
-		if (findings.length === 0) return "_No validated findings yet_";
+		if (findings.length === 0) return "_None yet_";
 
-		// Group by file for easier scanning
 		const byFile = new Map<string, Finding[]>();
 		for (const f of findings) {
 			const existing = byFile.get(f.filePath) || [];
@@ -613,7 +504,7 @@ ${vars.scriptsPath}/verify.sh ${vars.gameId} ${vars.findingId} REJECT "This is a
 					f.description.length > 80
 						? `${f.description.slice(0, 80)}...`
 						: f.description;
-				lines.push(`- Lines ${f.lineStart}-${f.lineEnd}: ${desc}`);
+				lines.push(`- Lines ${f.lineStart}–${f.lineEnd}: ${desc}`);
 			}
 		}
 
