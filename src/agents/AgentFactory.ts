@@ -19,6 +19,8 @@ export interface AgentRoleConfig {
 	thinkingLevel: ThinkingLevel;
 	/** Maximum turns before the agent is stopped. */
 	maxTurns?: number;
+	/** OAuth API key for subscription auth. Overrides ANTHROPIC_API_KEY. */
+	apiKey?: string;
 }
 
 /** Default thinking levels per role. Referee gets more thinking budget. */
@@ -66,6 +68,8 @@ export function createAgent(config: AgentRoleConfig): Agent {
 			tools: config.tools,
 		},
 		convertToLlm: defaultConvertToLlm,
+		// Inject OAuth key if provided — bypasses ANTHROPIC_API_KEY env var
+		getApiKey: config.apiKey ? () => config.apiKey : undefined,
 	});
 
 	return agent;

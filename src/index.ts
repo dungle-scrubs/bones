@@ -29,6 +29,9 @@ Usage: bones <command> [args]
 
 Setup Commands:
   init                      Install dependencies (required before --web)
+  login                     Authenticate with Claude Pro/Max (OAuth)
+  logout                    Remove saved OAuth credentials
+  auth-status               Check authentication status
 
 Autonomous Game:
   play <project_path> [opts] Run a fully autonomous game with LLM agents
@@ -39,6 +42,7 @@ Autonomous Game:
     --agents <count>           Number of agents (default: 3)
     --thinking <level>         Agent thinking level (default: medium)
     --referee-thinking <level> Referee thinking level (default: high)
+    --auth oauth               Use Claude Pro/Max subscription (run 'login' first)
 
 Game Flow Commands:
   setup <url> [options]     Create a new game
@@ -112,6 +116,9 @@ const commandHandlers: Record<
 	(args: string[]) => string | Promise<string>
 > = {
 	init: () => commands.init(),
+	login: () => commands.login(),
+	logout: () => commands.logoutCmd(),
+	"auth-status": () => commands.authStatus(),
 	play: (a) => commands.play(a),
 	setup: (a) => commands.setup(a),
 	"start-hunt": (a) => commands.startHunt(a),

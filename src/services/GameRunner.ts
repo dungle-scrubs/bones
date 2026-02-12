@@ -30,6 +30,8 @@ export interface PlayConfig extends SetupConfig {
 	agentThinking?: ThinkingLevel;
 	/** Thinking level for referee/verifier. */
 	refereeThinking?: ThinkingLevel;
+	/** OAuth API key for subscription auth (bypasses ANTHROPIC_API_KEY). */
+	apiKey?: string;
 }
 
 /** Events emitted by GameRunner for CLI/TUI consumption. */
@@ -123,6 +125,8 @@ export class GameRunner {
 	 * @param orchestrator - Existing Orchestrator with database connection
 	 * @param projectPath - Absolute path to the target project on disk
 	 */
+	private apiKey?: string;
+
 	constructor(orchestrator: Orchestrator, projectPath: string) {
 		this.orchestrator = orchestrator;
 		this.projectPath = projectPath;
@@ -145,6 +149,7 @@ export class GameRunner {
 	 */
 	async *play(config: PlayConfig): AsyncGenerator<GameEvent> {
 		const refereeModel = config.refereeModel ?? config.agentModel;
+		this.apiKey = config.apiKey;
 
 		// 1. Setup
 		const setup = this.orchestrator.setup(config);
@@ -208,7 +213,7 @@ export class GameRunner {
 					prompt,
 					tools,
 					refereeModel,
-					{ thinkingLevel: config.refereeThinking },
+					{ thinkingLevel: config.refereeThinking, apiKey: this.apiKey },
 					(agentId, role, event) => void 0, // events consumed internally
 				);
 
@@ -242,7 +247,7 @@ export class GameRunner {
 						prompt,
 						tools,
 						refereeModel,
-						{ thinkingLevel: config.refereeThinking },
+						{ thinkingLevel: config.refereeThinking, apiKey: this.apiKey },
 					);
 
 					this.accumulateUsage(result.totalUsage);
@@ -307,7 +312,7 @@ export class GameRunner {
 					prompt,
 					tools,
 					refereeModel,
-					{ thinkingLevel: config.refereeThinking },
+					{ thinkingLevel: config.refereeThinking, apiKey: this.apiKey },
 				);
 
 				this.accumulateUsage(result.totalUsage);
@@ -377,7 +382,7 @@ export class GameRunner {
 					prompt,
 					tools,
 					model,
-					{ thinkingLevel },
+					{ thinkingLevel, apiKey: this.apiKey },
 					undefined,
 					controller.signal,
 				);

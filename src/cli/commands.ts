@@ -9,6 +9,7 @@ import {
 	type IssueType,
 	RejectionReason,
 } from "../domain/types.js";
+import { getOAuthKey, isLoggedIn, login, logout } from "../services/Auth.js";
 import {
 	ensureDashboardRunning,
 	getDashboardUrl,
@@ -29,6 +30,85 @@ const VALID_CATEGORIES = Object.values(HuntCategory);
  */
 export class Commands {
 	constructor(private orchestrator: Orchestrator) {}
+
+	/**
+	 * Runs the Anthropic OAuth login flow for Claude Pro/Max subscription auth.
+	 * Opens browser, prompts for auth code, saves tokens to ~/.bones/oauth.json.
+	 *
+	 * @returns JSON result with login status
+	 */
+	async login(): Promise<string> {
+		const { execSync } = await import("node:child_process");
+
+		try {
+			const credentials = await login(
+				(url) => {
+					console.log(`\nOpen this URL in your browser:\n  ${url}\n`);
+					// Try to open browser automatically
+					try {
+						execSync(`open "${url}"`, { stdio: "ignore" });
+					} catch {
+						// Manual open is fine
+					}
+				},
+				async () => {
+					// Read auth code from stdin
+					const readline = await import("node:readline");
+					const rl = readline.createInterface({
+						input: process.stdin,
+						output: process.stdout,
+					});
+					return new Promise<string>((resolve) => {
+						rl.question("Paste the authorization code: ", (answer) => {
+							rl.close();
+							resolve(answer.trim());
+						});
+					});
+				},
+			);
+
+			return JSON.stringify({
+				success: true,
+				message:
+					"Logged in to Anthropic (Claude Pro/Max). Credentials saved to ~/.bones/oauth.json",
+				expires: new Date(credentials.expires).toISOString(),
+			});
+		} catch (error) {
+			return JSON.stringify({
+				error: `Login failed: ${(error as Error).message}`,
+			});
+		}
+	}
+
+	/**
+	 * Removes saved OAuth credentials.
+	 *
+	 * @returns JSON confirmation
+	 */
+	logoutCmd(): string {
+		logout();
+		return JSON.stringify({
+			success: true,
+			message: "Logged out. OAuth credentials removed.",
+		});
+	}
+
+	/**
+	 * Checks current OAuth authentication status.
+	 *
+	 * @returns JSON with auth status and expiry
+	 */
+	authStatus(): string {
+		const loggedIn = isLoggedIn();
+		return JSON.stringify({
+			authenticated: loggedIn,
+			provider: "anthropic",
+			billing: loggedIn ? "Claude Pro/Max subscription" : "not authenticated",
+			message: loggedIn
+				? "Using OAuth subscription auth. Token is valid."
+				: "Not logged in. Run 'bones login' to authenticate, or use ANTHROPIC_API_KEY for API billing.",
+		});
+	}
 
 	/**
 	 * Creates a new game with agents. Parses config options from args.
@@ -810,6 +890,7 @@ export class Commands {
 		let refereeModelSpec: string | undefined;
 		let agentThinking: string = "medium";
 		let refereeThinking: string = "high";
+		let useOAuth = false;
 
 		const setupArgs: string[] = [projectUrl];
 		let i = 1;
@@ -834,6 +915,16 @@ export class Commands {
 					refereeThinking = value;
 					i += 2;
 					break;
+				case "--auth":
+					if (value === "oauth") {
+						useOAuth = true;
+					} else {
+						return JSON.stringify({
+							error: `Invalid --auth value: ${value}. Use 'oauth' for subscription auth.`,
+						});
+					}
+					i += 2;
+					break;
 				default:
 					// Pass through to setup config parsing
 					setupArgs.push(flag);
@@ -845,6 +936,20 @@ export class Commands {
 					}
 					break;
 			}
+		}
+
+		// Resolve OAuth API key if requested
+		let oauthApiKey: string | undefined;
+		if (useOAuth) {
+			const key = await getOAuthKey();
+			if (!key) {
+				return JSON.stringify({
+					error:
+						"Not logged in. Run 'bones login' first to authenticate with Claude Pro/Max.",
+				});
+			}
+			oauthApiKey = key;
+			console.log("[auth]    Using Claude Pro/Max subscription (OAuth)");
 		}
 
 		// Resolve models
@@ -873,6 +978,7 @@ export class Commands {
 			refereeModel,
 			agentThinking: agentThinking as any,
 			refereeThinking: refereeThinking as any,
+			apiKey: oauthApiKey,
 		};
 
 		// Run the game

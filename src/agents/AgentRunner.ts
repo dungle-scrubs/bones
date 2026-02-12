@@ -43,7 +43,7 @@ export type AgentEventCallback = (
  * @param userPrompt - The task prompt to send
  * @param tools - Role-specific tools
  * @param model - LLM model to use
- * @param options - Optional overrides for thinking level and max turns
+ * @param options - Optional overrides for thinking level, max turns, and API key
  * @param onEvent - Optional callback for agent events
  * @param signal - Optional AbortSignal for external cancellation
  * @returns AgentRunResult with usage stats
@@ -58,6 +58,8 @@ export async function runAgent(
 	options?: {
 		thinkingLevel?: ThinkingLevel;
 		maxTurns?: number;
+		/** OAuth API key for subscription auth. */
+		apiKey?: string;
 	},
 	onEvent?: AgentEventCallback,
 	signal?: AbortSignal,
@@ -71,6 +73,7 @@ export async function runAgent(
 		tools,
 		model,
 		thinkingLevel,
+		apiKey: options?.apiKey,
 	});
 
 	const totalUsage: Usage = {
