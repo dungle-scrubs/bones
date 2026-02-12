@@ -64,7 +64,7 @@ async function ensureApiServerRunning(): Promise<{ started: boolean }> {
 	}
 
 	// Start API server in background
-	const child = spawn("node", ["dist/server.js"], {
+	const child = spawn("bun", ["dist/server.js"], {
 		cwd: SKILL_DIR,
 		detached: true,
 		stdio: "ignore",
@@ -88,7 +88,7 @@ async function ensureFrontendRunning(): Promise<{ started: boolean }> {
 	}
 
 	// Start dashboard frontend in background
-	const child = spawn("pnpm", ["dev"], {
+	const child = spawn("bun", ["dev"], {
 		cwd: DASHBOARD_DIR,
 		detached: true,
 		stdio: "ignore",

@@ -175,7 +175,7 @@ export class GameRunner {
 				agentCount: huntResult.agents.length,
 			};
 
-			await this.runParallelAgents(
+			const huntAgentResults = await this.runParallelAgents(
 				huntResult.agents,
 				"hunt",
 				config.agentModel,
@@ -183,10 +183,11 @@ export class GameRunner {
 				(agentId) =>
 					createHuntTools(this.orchestrator, gameId, agentId, this.projectPath),
 				huntResult.durationSeconds,
-				function* (agentId, result) {
-					yield { type: "hunt_agent_done" as const, agentId, result };
-				},
 			);
+
+			for (const { agentId, result } of huntAgentResults) {
+				yield { type: "hunt_agent_done", agentId, result };
+			}
 
 			yield { type: "hunt_end", round: huntResult.round };
 
@@ -269,7 +270,7 @@ export class GameRunner {
 				agentCount: reviewResult.agents.length,
 			};
 
-			await this.runParallelAgents(
+			const reviewAgentResults = await this.runParallelAgents(
 				reviewResult.agents,
 				"review",
 				config.agentModel,
@@ -282,10 +283,11 @@ export class GameRunner {
 						this.projectPath,
 					),
 				reviewResult.durationSeconds,
-				function* (agentId, result) {
-					yield { type: "review_agent_done" as const, agentId, result };
-				},
 			);
+
+			for (const { agentId, result } of reviewAgentResults) {
+				yield { type: "review_agent_done", agentId, result };
+			}
 
 			yield { type: "review_end", round: reviewResult.round };
 
@@ -354,6 +356,9 @@ export class GameRunner {
 	/**
 	 * Runs multiple agents in parallel with a shared timeout.
 	 * Uses Promise.allSettled so one failure doesn't kill the others.
+	 * Collects results for the caller to yield as events.
+	 *
+	 * @returns Completed agent results (excludes failures)
 	 */
 	private async runParallelAgents(
 		agents: Array<{ agentId: string; prompt: string }>,
@@ -362,11 +367,7 @@ export class GameRunner {
 		thinkingLevel: ThinkingLevel | undefined,
 		createTools: (agentId: string) => any[],
 		timeoutSeconds: number,
-		emitResult: (
-			agentId: string,
-			result: AgentRunResult,
-		) => Generator<GameEvent>,
-	): Promise<void> {
+	): Promise<Array<{ agentId: string; result: AgentRunResult }>> {
 		const controller = new AbortController();
 		const timeout = setTimeout(() => controller.abort(), timeoutSeconds * 1000);
 
@@ -391,10 +392,21 @@ export class GameRunner {
 				return { agentId: a.agentId, result };
 			});
 
-			const results = await Promise.allSettled(promises);
+			const settled = await Promise.allSettled(promises);
+			const completed: Array<{ agentId: string; result: AgentRunResult }> = [];
 
-			// Results are consumed but events were emitted during execution
-			// via tool calls to the orchestrator
+			for (let i = 0; i < settled.length; i++) {
+				const outcome = settled[i];
+				if (outcome.status === "fulfilled") {
+					completed.push(outcome.value);
+				} else {
+					console.error(
+						`[${role}] agent ${agents[i].agentId} failed: ${outcome.reason}`,
+					);
+				}
+			}
+
+			return completed;
 		} finally {
 			clearTimeout(timeout);
 		}

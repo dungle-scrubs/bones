@@ -1,12 +1,12 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type { Finding } from "../domain/Finding.js";
 import type { Game } from "../domain/Game.js";
 import type { ScoreboardEntry } from "../domain/types.js";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const LOGS_DIR = join(__dirname, "..", "..", "logs");
+const DATA_DIR = process.env.BONES_DATA_DIR ?? join(homedir(), ".bones");
+const LOGS_DIR = join(DATA_DIR, "logs");
 
 /** Data needed to export a completed game's results. */
 export interface ExportData {

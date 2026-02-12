@@ -92,23 +92,10 @@ export interface VerificationPromptVars {
 }
 
 /**
- * Render mode for prompts.
- * - 'cli': Includes shell command sections (for human-driven games)
- * - 'tool': Replaces command sections with tool usage guidance (for autonomous games)
- */
-export type PromptMode = "cli" | "tool";
-
-/**
  * Generates markdown prompts for agents and referee during game phases.
  * Prompts include game context, instructions, scoring info, and CLI commands.
- * When mode is 'tool', command sections are replaced with tool guidance.
  */
 export class PromptRenderer {
-	private mode: PromptMode;
-
-	constructor(mode: PromptMode = "cli") {
-		this.mode = mode;
-	}
 	/**
 	 * Generates the hunt phase prompt for an agent.
 	 * Includes penalty warnings, existing findings, and submission commands.
@@ -571,24 +558,6 @@ ${vars.scriptsPath}/verify.sh ${vars.gameId} ${vars.findingId} REJECT "Public AP
 ${vars.scriptsPath}/verify.sh ${vars.gameId} ${vars.findingId} REJECT "This is a style preference, code works correctly" style_preference
 \`\`\`
 `;
-	}
-
-	/**
-	 * Renders a command section based on current mode.
-	 * In 'cli' mode, returns the shell commands as-is.
-	 * In 'tool' mode, returns tool usage guidance.
-	 *
-	 * @param cliContent - Shell command section for CLI mode
-	 * @param toolNames - Tool names available in tool mode
-	 * @returns Formatted command/tool section
-	 */
-	private renderCommands(cliContent: string, toolNames: string[]): string {
-		if (this.mode === "cli") {
-			return cliContent;
-		}
-
-		const toolList = toolNames.map((t) => `- \`${t}\``).join("\n");
-		return `## Tools Available\n${toolList}\n\nUse the tools above to take actions. Tool schemas describe the parameters.`;
 	}
 
 	/** Formats scoreboard entries as a markdown table. */

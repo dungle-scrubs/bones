@@ -10,37 +10,90 @@ import {
 	VerificationStatus,
 } from "./types.js";
 
+/** All fields needed to construct a Finding. Used by constructor and factories. */
+export interface FindingInit {
+	id: number;
+	gameId: string;
+	roundNumber: number;
+	agentId: string;
+	description: string;
+	filePath: string;
+	lineStart: number;
+	lineEnd: number;
+	codeSnippet: string | null;
+	patternHash: string;
+	status: FindingStatus;
+	duplicateOf: number | null;
+	refereeVerdict: string | null;
+	confidence: Confidence | null;
+	pointsAwarded: number;
+	createdAt: Date;
+	validatedAt: Date | null;
+	confidenceScore: number | null;
+	issueType: IssueType | null;
+	impactTier: ImpactTier | null;
+	rejectionReason: RejectionReason | null;
+	verificationStatus: VerificationStatus;
+	verifierExplanation: string | null;
+}
+
 /**
  * Represents an issue discovered by an agent during the hunt phase.
  * Findings are submitted with a file location, description, and optional code snippet.
  * They go through validation by the referee and can be disputed by other agents.
  */
 export class Finding {
-	constructor(
-		public readonly id: number,
-		public readonly gameId: string,
-		public readonly roundNumber: number,
-		public readonly agentId: string,
-		public readonly description: string,
-		public readonly filePath: string,
-		public readonly lineStart: number,
-		public readonly lineEnd: number,
-		public readonly codeSnippet: string | null,
-		public readonly patternHash: string,
-		private _status: FindingStatus,
-		private _duplicateOf: number | null,
-		private _refereeVerdict: string | null,
-		private _confidence: Confidence | null,
-		private _pointsAwarded: number,
-		public readonly createdAt: Date,
-		private _validatedAt: Date | null,
-		private _confidenceScore: number | null,
-		private _issueType: IssueType | null,
-		private _impactTier: ImpactTier | null,
-		private _rejectionReason: RejectionReason | null,
-		private _verificationStatus: VerificationStatus,
-		private _verifierExplanation: string | null,
-	) {}
+	public readonly id: number;
+	public readonly gameId: string;
+	public readonly roundNumber: number;
+	public readonly agentId: string;
+	public readonly description: string;
+	public readonly filePath: string;
+	public readonly lineStart: number;
+	public readonly lineEnd: number;
+	public readonly codeSnippet: string | null;
+	public readonly patternHash: string;
+	public readonly createdAt: Date;
+
+	private _status: FindingStatus;
+	private _duplicateOf: number | null;
+	private _refereeVerdict: string | null;
+	private _confidence: Confidence | null;
+	private _pointsAwarded: number;
+	private _validatedAt: Date | null;
+	private _confidenceScore: number | null;
+	private _issueType: IssueType | null;
+	private _impactTier: ImpactTier | null;
+	private _rejectionReason: RejectionReason | null;
+	private _verificationStatus: VerificationStatus;
+	private _verifierExplanation: string | null;
+
+	constructor(init: FindingInit) {
+		this.id = init.id;
+		this.gameId = init.gameId;
+		this.roundNumber = init.roundNumber;
+		this.agentId = init.agentId;
+		this.description = init.description;
+		this.filePath = init.filePath;
+		this.lineStart = init.lineStart;
+		this.lineEnd = init.lineEnd;
+		this.codeSnippet = init.codeSnippet;
+		this.patternHash = init.patternHash;
+		this.createdAt = init.createdAt;
+
+		this._status = init.status;
+		this._duplicateOf = init.duplicateOf;
+		this._refereeVerdict = init.refereeVerdict;
+		this._confidence = init.confidence;
+		this._pointsAwarded = init.pointsAwarded;
+		this._validatedAt = init.validatedAt;
+		this._confidenceScore = init.confidenceScore;
+		this._issueType = init.issueType;
+		this._impactTier = init.impactTier;
+		this._rejectionReason = init.rejectionReason;
+		this._verificationStatus = init.verificationStatus;
+		this._verifierExplanation = init.verifierExplanation;
+	}
 
 	get status(): FindingStatus {
 		return this._status;
@@ -121,21 +174,16 @@ export class Finding {
 		lineEnd: number,
 		description: string,
 	): string {
-		// Bucket line ranges to ~10 line granularity for fuzzy matching
 		const bucketStart = Math.floor(lineStart / 10) * 10;
 		const bucketEnd = Math.ceil(lineEnd / 10) * 10;
-
-		// Extract key terms from description (remove common words)
 		const keyTerms = Finding.extractKeyTerms(description);
-
 		const normalized = `${filePath}:${bucketStart}-${bucketEnd}:${keyTerms}`;
 		return createHash("sha256").update(normalized).digest("hex").slice(0, 16);
 	}
 
 	/**
 	 * Extracts meaningful keywords from a description for duplicate matching.
-	 * Removes stop words (articles, prepositions, etc.) and returns sorted unique terms.
-	 * Sorting ensures consistent hashing regardless of word order.
+	 * Removes stop words and returns sorted unique terms.
 	 */
 	private static extractKeyTerms(description: string): string {
 		const stopWords = new Set([
@@ -217,10 +265,8 @@ export class Finding {
 	 * Returns 0 if findings are in different files.
 	 */
 	similarityScore(other: Finding): number {
-		// Must be same file
 		if (this.filePath !== other.filePath) return 0;
 
-		// Calculate line overlap ratio
 		const overlapStart = Math.max(this.lineStart, other.lineStart);
 		const overlapEnd = Math.min(this.lineEnd, other.lineEnd);
 		const overlapLines = Math.max(0, overlapEnd - overlapStart + 1);
@@ -230,17 +276,14 @@ export class Finding {
 		);
 		const lineOverlap = overlapLines / totalLines;
 
-		// Calculate description keyword overlap
 		const thisTermsStr = Finding.extractKeyTerms(this.description);
 		const otherTermsStr = Finding.extractKeyTerms(other.description);
 
-		// Handle empty key terms - if both empty, consider descriptions equal for overlap
-		// If only one is empty, there's no description overlap
 		let descOverlap = 0;
 		if (thisTermsStr === "" && otherTermsStr === "") {
-			descOverlap = 1; // Both have no key terms, treat as matching
+			descOverlap = 1;
 		} else if (thisTermsStr === "" || otherTermsStr === "") {
-			descOverlap = 0; // One has terms, one doesn't - no overlap
+			descOverlap = 0;
 		} else {
 			const thisTerms = new Set(thisTermsStr.split(" "));
 			const otherTerms = new Set(otherTermsStr.split(" "));
@@ -251,17 +294,16 @@ export class Finding {
 			descOverlap = totalTerms > 0 ? commonTerms / totalTerms : 0;
 		}
 
-		// Weight: 60% line overlap, 40% description overlap
 		return lineOverlap * 0.6 + descOverlap * 0.4;
 	}
 
 	/**
 	 * Marks the finding as valid, awarding points to the submitting agent.
-	 * Called by the referee when the finding represents a real issue.
+	 *
 	 * @param verdict - Referee's explanation of the validation
 	 * @param confidence - high/medium/low confidence level
 	 * @param confidenceScore - 0-100 numerical confidence
-	 * @param issueType - Category-specific issue type (e.g., logic_error, broken_example)
+	 * @param issueType - Category-specific issue type
 	 * @param impactTier - Severity: critical, major, minor
 	 * @param needsVerification - Whether to spawn a verification agent
 	 * @returns Points awarded (positive, or 0 if pending verification)
@@ -286,7 +328,6 @@ export class Finding {
 		this._impactTier = impactTier ?? null;
 
 		if (needsVerification) {
-			// Don't award points yet - wait for verification
 			this._verificationStatus = VerificationStatus.Pending;
 			this._pointsAwarded = 0;
 		} else {
@@ -301,6 +342,7 @@ export class Finding {
 	/**
 	 * Records the verification result from a second-pass agent.
 	 * If confirmed, awards points. If overridden to false, applies penalty.
+	 *
 	 * @returns Points to award (may be negative if overridden to false)
 	 */
 	applyVerification(
@@ -326,7 +368,6 @@ export class Finding {
 			return this._pointsAwarded;
 		}
 
-		// Verification failed - this was actually a false positive
 		this._verificationStatus = VerificationStatus.Overridden;
 		this._status = FindingStatus.FalseFlag;
 		this._rejectionReason = rejectionReason ?? null;
@@ -336,7 +377,7 @@ export class Finding {
 
 	/**
 	 * Marks the finding as a false positive, penalizing the submitting agent.
-	 * Called by the referee when the finding is not a real issue.
+	 *
 	 * @param verdict - Referee's explanation of why this is invalid
 	 * @param rejectionReason - Category of why this was rejected
 	 * @returns Points awarded (negative)
@@ -356,8 +397,7 @@ export class Finding {
 
 	/**
 	 * Revokes a previously valid finding after a successful dispute.
-	 * Changes status from Valid to FalseFlag and adjusts points.
-	 * Original submitter's stats are updated separately in Agent.revertValidToFalse().
+	 *
 	 * @returns Points awarded (negative)
 	 * @throws Error if finding is not currently valid
 	 */
@@ -368,14 +408,13 @@ export class Finding {
 		this._status = FindingStatus.FalseFlag;
 		this._refereeVerdict = verdict;
 		this._pointsAwarded = SCORING.FALSE_FLAG;
-		// Clear verification status to prevent verifyFinding from processing revoked findings
 		this._verificationStatus = VerificationStatus.None;
 		return this._pointsAwarded;
 	}
 
 	/**
 	 * Marks the finding as a duplicate of an earlier finding.
-	 * Penalizes the submitter for not checking existing findings.
+	 *
 	 * @returns Points awarded (negative, more severe than false flag)
 	 * @throws Error if finding is not in pending status
 	 */
@@ -406,13 +445,7 @@ export class Finding {
 		lineEnd: number,
 		codeSnippet: string | null,
 	): Finding {
-		const patternHash = Finding.computePatternHash(
-			filePath,
-			lineStart,
-			lineEnd,
-			description,
-		);
-		return new Finding(
+		return new Finding({
 			id,
 			gameId,
 			roundNumber,
@@ -422,59 +455,63 @@ export class Finding {
 			lineStart,
 			lineEnd,
 			codeSnippet,
-			patternHash,
-			FindingStatus.Pending,
-			null,
-			null,
-			null, // confidence
-			0,
-			new Date(),
-			null,
-			null, // confidenceScore
-			null, // issueType
-			null, // impactTier
-			null, // rejectionReason
-			VerificationStatus.None,
-			null, // verifierExplanation
-		);
+			patternHash: Finding.computePatternHash(
+				filePath,
+				lineStart,
+				lineEnd,
+				description,
+			),
+			status: FindingStatus.Pending,
+			duplicateOf: null,
+			refereeVerdict: null,
+			confidence: null,
+			pointsAwarded: 0,
+			createdAt: new Date(),
+			validatedAt: null,
+			confidenceScore: null,
+			issueType: null,
+			impactTier: null,
+			rejectionReason: null,
+			verificationStatus: VerificationStatus.None,
+			verifierExplanation: null,
+		});
 	}
 
 	/**
 	 * Reconstitutes a finding domain object from its database representation.
-	 * Maps snake_case columns to camelCase properties and parses dates.
 	 */
 	static fromRow(row: FindingRow): Finding {
-		return new Finding(
-			row.id,
-			row.game_id,
-			row.round_number,
-			row.agent_id,
-			row.description,
-			row.file_path,
-			row.line_start,
-			row.line_end,
-			row.code_snippet,
-			row.pattern_hash,
-			row.status as FindingStatus,
-			row.duplicate_of,
-			row.referee_verdict,
-			row.confidence,
-			row.points_awarded,
-			new Date(row.created_at),
-			row.validated_at ? new Date(row.validated_at) : null,
-			row.confidence_score,
-			row.issue_type as IssueType | null,
-			row.impact_tier as ImpactTier | null,
-			row.rejection_reason as RejectionReason | null,
-			(row.verification_status as VerificationStatus) ||
+		return new Finding({
+			id: row.id,
+			gameId: row.game_id,
+			roundNumber: row.round_number,
+			agentId: row.agent_id,
+			description: row.description,
+			filePath: row.file_path,
+			lineStart: row.line_start,
+			lineEnd: row.line_end,
+			codeSnippet: row.code_snippet,
+			patternHash: row.pattern_hash,
+			status: row.status as FindingStatus,
+			duplicateOf: row.duplicate_of,
+			refereeVerdict: row.referee_verdict,
+			confidence: row.confidence,
+			pointsAwarded: row.points_awarded,
+			createdAt: new Date(row.created_at),
+			validatedAt: row.validated_at ? new Date(row.validated_at) : null,
+			confidenceScore: row.confidence_score,
+			issueType: row.issue_type as IssueType | null,
+			impactTier: row.impact_tier as ImpactTier | null,
+			rejectionReason: row.rejection_reason as RejectionReason | null,
+			verificationStatus:
+				(row.verification_status as VerificationStatus) ||
 				VerificationStatus.None,
-			row.verifier_explanation,
-		);
+			verifierExplanation: row.verifier_explanation,
+		});
 	}
 
 	/**
 	 * Serializes the finding to database row format for persistence.
-	 * Maps camelCase properties to snake_case columns and formats dates as ISO strings.
 	 */
 	toRow(): FindingRow {
 		return {

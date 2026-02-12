@@ -1,38 +1,38 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { Finding } from "./Finding.js";
 import { FindingStatus, SCORING, VerificationStatus } from "./types.js";
 
 function createFinding(status: FindingStatus = FindingStatus.Pending): Finding {
-	return new Finding(
-		1,
-		"game-1",
-		1,
-		"agent-1",
-		"Null pointer dereference in handleRequest",
-		"src/server.ts",
-		42,
-		45,
-		"const x = obj.value; // obj can be null",
-		Finding.computePatternHash(
+	return new Finding({
+		id: 1,
+		gameId: "game-1",
+		roundNumber: 1,
+		agentId: "agent-1",
+		description: "Null pointer dereference in handleRequest",
+		filePath: "src/server.ts",
+		lineStart: 42,
+		lineEnd: 45,
+		codeSnippet: "const x = obj.value; // obj can be null",
+		patternHash: Finding.computePatternHash(
 			"src/server.ts",
 			42,
 			45,
 			"Null pointer dereference in handleRequest",
 		),
 		status,
-		null,
-		null,
-		null,
-		0,
-		new Date(),
-		null,
-		null, // confidenceScore
-		null, // issueType
-		null, // impactTier
-		null, // rejectionReason
-		VerificationStatus.None,
-		null, // verifierExplanation
-	);
+		duplicateOf: null,
+		refereeVerdict: null,
+		confidence: null,
+		pointsAwarded: 0,
+		createdAt: new Date(),
+		validatedAt: null,
+		confidenceScore: null,
+		issueType: null,
+		impactTier: null,
+		rejectionReason: null,
+		verificationStatus: VerificationStatus.None,
+		verifierExplanation: null,
+	});
 }
 
 describe("Finding", () => {
@@ -86,7 +86,6 @@ describe("Finding", () => {
 		});
 
 		it("buckets nearby line ranges together", () => {
-			// Lines 42-45 and 43-46 should bucket to same range (40-50)
 			const hash1 = Finding.computePatternHash(
 				"src/file.ts",
 				42,
@@ -120,7 +119,6 @@ describe("Finding", () => {
 		});
 
 		it("extracts key terms and ignores stop words", () => {
-			// Same key terms, different phrasing
 			const hash1 = Finding.computePatternHash(
 				"src/file.ts",
 				10,
@@ -140,7 +138,6 @@ describe("Finding", () => {
 	describe("overlapsWithLines", () => {
 		it("returns true for overlapping ranges", () => {
 			const finding = createFinding();
-			// finding is lines 42-45
 			expect(finding.overlapsWithLines(40, 43)).toBe(true);
 			expect(finding.overlapsWithLines(44, 50)).toBe(true);
 			expect(finding.overlapsWithLines(43, 44)).toBe(true);
@@ -148,7 +145,6 @@ describe("Finding", () => {
 
 		it("returns false for non-overlapping ranges", () => {
 			const finding = createFinding();
-			// finding is lines 42-45
 			expect(finding.overlapsWithLines(10, 20)).toBe(false);
 			expect(finding.overlapsWithLines(50, 60)).toBe(false);
 		});
@@ -162,92 +158,92 @@ describe("Finding", () => {
 	describe("similarityScore", () => {
 		it("returns 0 for different files", () => {
 			const finding1 = createFinding();
-			const finding2 = new Finding(
-				2,
-				"game-1",
-				1,
-				"agent-2",
-				"Same description",
-				"src/other.ts", // different file
-				42,
-				45,
-				null,
-				"hash",
-				FindingStatus.Pending,
-				null,
-				null,
-				null,
-				0,
-				new Date(),
-				null,
-				null, // confidenceScore
-				null, // issueType
-				null, // impactTier
-				null, // rejectionReason
-				VerificationStatus.None,
-				null,
-			);
+			const finding2 = new Finding({
+				id: 2,
+				gameId: "game-1",
+				roundNumber: 1,
+				agentId: "agent-2",
+				description: "Same description",
+				filePath: "src/other.ts",
+				lineStart: 42,
+				lineEnd: 45,
+				codeSnippet: null,
+				patternHash: "hash",
+				status: FindingStatus.Pending,
+				duplicateOf: null,
+				refereeVerdict: null,
+				confidence: null,
+				pointsAwarded: 0,
+				createdAt: new Date(),
+				validatedAt: null,
+				confidenceScore: null,
+				issueType: null,
+				impactTier: null,
+				rejectionReason: null,
+				verificationStatus: VerificationStatus.None,
+				verifierExplanation: null,
+			});
 			expect(finding1.similarityScore(finding2)).toBe(0);
 		});
 
 		it("returns high score for same file and overlapping lines", () => {
 			const finding1 = createFinding();
-			const finding2 = new Finding(
-				2,
-				"game-1",
-				1,
-				"agent-2",
-				"Null pointer dereference in handleRequest function",
-				"src/server.ts", // same file
-				43,
-				46, // overlapping lines
-				null,
-				"hash",
-				FindingStatus.Pending,
-				null,
-				null,
-				null,
-				0,
-				new Date(),
-				null,
-				null, // confidenceScore
-				null, // issueType
-				null, // impactTier
-				null, // rejectionReason
-				VerificationStatus.None,
-				null,
-			);
+			const finding2 = new Finding({
+				id: 2,
+				gameId: "game-1",
+				roundNumber: 1,
+				agentId: "agent-2",
+				description: "Null pointer dereference in handleRequest function",
+				filePath: "src/server.ts",
+				lineStart: 43,
+				lineEnd: 46,
+				codeSnippet: null,
+				patternHash: "hash",
+				status: FindingStatus.Pending,
+				duplicateOf: null,
+				refereeVerdict: null,
+				confidence: null,
+				pointsAwarded: 0,
+				createdAt: new Date(),
+				validatedAt: null,
+				confidenceScore: null,
+				issueType: null,
+				impactTier: null,
+				rejectionReason: null,
+				verificationStatus: VerificationStatus.None,
+				verifierExplanation: null,
+			});
 			const score = finding1.similarityScore(finding2);
 			expect(score).toBeGreaterThan(0.5);
 		});
 
 		it("returns lower score for non-overlapping lines", () => {
 			const finding1 = createFinding();
-			const finding2 = new Finding(
-				2,
-				"game-1",
-				1,
-				"agent-2",
-				"Different bug entirely",
-				"src/server.ts",
-				100,
-				105, // non-overlapping
-				null,
-				"hash",
-				FindingStatus.Pending,
-				null,
-				null,
-				null,
-				0,
-				new Date(),
-				null,
-				null, // confidenceScore
-				null, // issueType
-				null, // impactTier
-				null, // rejectionReason
-				VerificationStatus.None,
-				null,
-			);
+			const finding2 = new Finding({
+				id: 2,
+				gameId: "game-1",
+				roundNumber: 1,
+				agentId: "agent-2",
+				description: "Different bug entirely",
+				filePath: "src/server.ts",
+				lineStart: 100,
+				lineEnd: 105,
+				codeSnippet: null,
+				patternHash: "hash",
+				status: FindingStatus.Pending,
+				duplicateOf: null,
+				refereeVerdict: null,
+				confidence: null,
+				pointsAwarded: 0,
+				createdAt: new Date(),
+				validatedAt: null,
+				confidenceScore: null,
+				issueType: null,
+				impactTier: null,
+				rejectionReason: null,
+				verificationStatus: VerificationStatus.None,
+				verifierExplanation: null,
+			});
 			const score = finding1.similarityScore(finding2);
 			expect(score).toBeLessThan(0.5);
 		});
@@ -314,7 +310,7 @@ describe("Finding", () => {
 			expect(finding.duplicateOf).toBe(99);
 			expect(finding.refereeVerdict).toBe("Same as finding #99");
 			expect(points).toBe(SCORING.DUPLICATE);
-			expect(points).toBeLessThan(SCORING.FALSE_FLAG); // Duplicate is worse
+			expect(points).toBeLessThan(SCORING.FALSE_FLAG);
 		});
 
 		it("throws when not pending", () => {
@@ -328,7 +324,6 @@ describe("Finding", () => {
 	describe("revokeValidation", () => {
 		it("revokes valid finding after dispute", () => {
 			const finding = createFinding(FindingStatus.Valid);
-			// Manually set points to simulate validation
 			(finding as unknown as { _pointsAwarded: number })._pointsAwarded =
 				SCORING.VALID_FINDING;
 
