@@ -7,7 +7,7 @@ import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
 import { Type } from "@sinclair/typebox";
 import type { IssueType, RejectionReason } from "../../domain/types.js";
 import type { Orchestrator } from "../../services/Orchestrator.js";
-import { createReadFileTool } from "./shared.js";
+import { type PathFilter, createReadFileTool } from "./shared.js";
 
 /**
  * Creates tools for verifying uncertain findings.
@@ -21,6 +21,7 @@ export function createVerifierTools(
 	orchestrator: Orchestrator,
 	gameId: string,
 	projectPath: string,
+	filter?: PathFilter,
 ): AgentTool[] {
 	const verifyFinding: AgentTool = {
 		name: "verify_finding",
@@ -88,5 +89,5 @@ export function createVerifierTools(
 		},
 	};
 
-	return [verifyFinding, createReadFileTool(projectPath)];
+	return [verifyFinding, createReadFileTool(projectPath, filter)];
 }

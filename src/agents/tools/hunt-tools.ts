@@ -6,7 +6,7 @@
 import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
 import { Type } from "@sinclair/typebox";
 import type { Orchestrator } from "../../services/Orchestrator.js";
-import { createReadFileTool, createSearchCodeTool } from "./shared.js";
+import { type PathFilter, createReadFileTool, createSearchCodeTool } from "./shared.js";
 
 /**
  * Creates the full set of tools available to a hunt agent.
@@ -15,6 +15,7 @@ import { createReadFileTool, createSearchCodeTool } from "./shared.js";
  * @param gameId - Current game ID
  * @param agentId - This agent's ID
  * @param projectPath - Absolute path to target project
+ * @param filter - Optional include/exclude path filters
  * @returns Array of AgentTools for the hunt phase
  */
 export function createHuntTools(
@@ -22,6 +23,7 @@ export function createHuntTools(
 	gameId: string,
 	agentId: string,
 	projectPath: string,
+	filter?: PathFilter,
 ): AgentTool[] {
 	const submitFinding: AgentTool = {
 		name: "submit_finding",
@@ -118,7 +120,7 @@ export function createHuntTools(
 	return [
 		submitFinding,
 		markDone,
-		createReadFileTool(projectPath),
-		createSearchCodeTool(projectPath),
+		createReadFileTool(projectPath, filter),
+		createSearchCodeTool(projectPath, filter),
 	];
 }

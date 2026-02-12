@@ -12,7 +12,7 @@ import type {
 	RejectionReason,
 } from "../../domain/types.js";
 import type { Orchestrator } from "../../services/Orchestrator.js";
-import { createReadFileTool } from "./shared.js";
+import { type PathFilter, createReadFileTool } from "./shared.js";
 
 /**
  * Creates the tool for validating a single finding.
@@ -27,6 +27,7 @@ export function createRefereeValidationTools(
 	orchestrator: Orchestrator,
 	gameId: string,
 	projectPath: string,
+	filter?: PathFilter,
 ): AgentTool[] {
 	const validateFinding: AgentTool = {
 		name: "validate_finding",
@@ -141,7 +142,7 @@ export function createRefereeValidationTools(
 		},
 	};
 
-	return [validateFinding, createReadFileTool(projectPath)];
+	return [validateFinding, createReadFileTool(projectPath, filter)];
 }
 
 /**
@@ -156,6 +157,7 @@ export function createRefereeResolutionTools(
 	orchestrator: Orchestrator,
 	gameId: string,
 	projectPath: string,
+	filter?: PathFilter,
 ): AgentTool[] {
 	const resolveDispute: AgentTool = {
 		name: "resolve_dispute",
@@ -209,5 +211,5 @@ export function createRefereeResolutionTools(
 		},
 	};
 
-	return [resolveDispute, createReadFileTool(projectPath)];
+	return [resolveDispute, createReadFileTool(projectPath, filter)];
 }

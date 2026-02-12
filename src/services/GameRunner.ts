@@ -14,6 +14,7 @@ import {
 } from "../agents/tools/referee-tools.js";
 import { createReviewTools } from "../agents/tools/review-tools.js";
 import { createVerifierTools } from "../agents/tools/verifier-tools.js";
+import type { PathFilter } from "../agents/tools/shared.js";
 import type { Orchestrator, SetupConfig } from "./Orchestrator.js";
 
 // ---------------------------------------------------------------------------
@@ -32,6 +33,8 @@ export interface PlayConfig extends SetupConfig {
 	refereeThinking?: ThinkingLevel;
 	/** OAuth API key for subscription auth (bypasses ANTHROPIC_API_KEY). */
 	apiKey?: string;
+	/** Path include/exclude filters for agent tools. */
+	pathFilter?: PathFilter;
 }
 
 /** Events emitted by GameRunner for CLI/TUI consumption. */
@@ -77,6 +80,7 @@ export class GameRunner {
 	private projectPath: string;
 	private totalCost: Usage;
 	private apiKey?: string;
+	private pathFilter?: PathFilter;
 
 	/**
 	 * @param orchestrator - Existing Orchestrator with database connection
@@ -105,6 +109,7 @@ export class GameRunner {
 	async *play(config: PlayConfig): AsyncGenerator<GameEvent> {
 		const refereeModel = config.refereeModel ?? config.agentModel;
 		this.apiKey = config.apiKey;
+		this.pathFilter = config.pathFilter;
 
 		// 1. Setup
 		const setup = this.orchestrator.setup(config);
@@ -127,7 +132,7 @@ export class GameRunner {
 				"hunt",
 				config.agentModel,
 				config.agentThinking,
-				(agentId) => createHuntTools(this.orchestrator, gameId, agentId, this.projectPath),
+				(agentId) => createHuntTools(this.orchestrator, gameId, agentId, this.projectPath, this.pathFilter),
 				huntResult.durationSeconds,
 			);
 
@@ -148,7 +153,7 @@ export class GameRunner {
 					"referee",
 					"You are a code review referee. Validate findings by reading the actual code and making a verdict. Use the validate_finding tool to submit your verdict.",
 					validation.prompt,
-					createRefereeValidationTools(this.orchestrator, gameId, this.projectPath),
+					createRefereeValidationTools(this.orchestrator, gameId, this.projectPath, this.pathFilter),
 					refereeModel,
 					config.refereeThinking,
 					REFEREE_TIMEOUT_SECS,
@@ -171,7 +176,7 @@ export class GameRunner {
 						"verifier",
 						"You are an independent code verifier. Determine if this finding is a valid issue. Use the verify_finding tool to submit your verdict.",
 						finding.prompt,
-						createVerifierTools(this.orchestrator, gameId, this.projectPath),
+						createVerifierTools(this.orchestrator, gameId, this.projectPath, this.pathFilter),
 						refereeModel,
 						config.refereeThinking,
 						VERIFIER_TIMEOUT_SECS,
@@ -193,7 +198,7 @@ export class GameRunner {
 				"review",
 				config.agentModel,
 				config.agentThinking,
-				(agentId) => createReviewTools(this.orchestrator, gameId, agentId, this.projectPath),
+				(agentId) => createReviewTools(this.orchestrator, gameId, agentId, this.projectPath, this.pathFilter),
 				reviewResult.durationSeconds,
 			);
 
@@ -214,7 +219,7 @@ export class GameRunner {
 					"referee",
 					"You are a code review referee. Resolve this dispute by reading the code and determining who is correct. Use the resolve_dispute tool to submit your verdict.",
 					resolution.prompt,
-					createRefereeResolutionTools(this.orchestrator, gameId, this.projectPath),
+					createRefereeResolutionTools(this.orchestrator, gameId, this.projectPath, this.pathFilter),
 					refereeModel,
 					config.refereeThinking,
 					DISPUTE_TIMEOUT_SECS,

@@ -43,6 +43,8 @@ export interface PlayOpts extends SetupOpts {
 	thinking?: string;
 	refereeThinking?: string;
 	auth?: string;
+	include?: string[];
+	exclude?: string[];
 }
 
 /**
@@ -797,6 +799,12 @@ export class Commands {
 			return JSON.stringify(config);
 		}
 
+		// Build path filter from --include/--exclude
+		const pathFilter =
+			opts.include || opts.exclude
+				? { include: opts.include, exclude: opts.exclude }
+				: undefined;
+
 		const playConfig: PlayConfig = {
 			...config,
 			agentModel,
@@ -804,6 +812,7 @@ export class Commands {
 			agentThinking: (opts.thinking ?? "medium") as any,
 			refereeThinking: (opts.refereeThinking ?? "high") as any,
 			apiKey: oauthApiKey,
+			pathFilter,
 		};
 
 		const runner = new GameRunner(this.orchestrator, resolvedPath);
