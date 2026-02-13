@@ -452,7 +452,10 @@ The initial referee was uncertain. Independently verify:
 - Documentation contradicts actual behavior
 
 ### Invalid (REJECT) — reasons:
-${rejectionReasons.split(", ").map((r) => `- ${r}`).join("\n")}
+${rejectionReasons
+	.split(", ")
+	.map((r) => `- ${r}`)
+	.join("\n")}
 
 Use the **verify_finding** tool:
 - **CONFIRM** with explanation (and optional corrected issue_type: ${issueTypeList})

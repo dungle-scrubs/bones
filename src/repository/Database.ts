@@ -135,10 +135,18 @@ export class Database {
 		// Column migrations — each ALTER TABLE is idempotent (fails silently if exists).
 		// Data migrations follow their corresponding column additions.
 		const addColumn = (sql: string): void => {
-			try { this.db.exec(sql); } catch { /* column already exists */ }
+			try {
+				this.db.exec(sql);
+			} catch {
+				/* column already exists */
+			}
 		};
 		const tryExec = (sql: string): void => {
-			try { this.db.exec(sql); } catch { /* safe to skip — legacy column missing */ }
+			try {
+				this.db.exec(sql);
+			} catch {
+				/* safe to skip — legacy column missing */
+			}
 		};
 
 		this.db.transaction(() => {
@@ -148,17 +156,25 @@ export class Database {
 
 			// Rename bug_category → issue_type
 			addColumn("ALTER TABLE findings ADD COLUMN issue_type TEXT");
-			tryExec("UPDATE findings SET issue_type = bug_category WHERE issue_type IS NULL AND bug_category IS NOT NULL");
+			tryExec(
+				"UPDATE findings SET issue_type = bug_category WHERE issue_type IS NULL AND bug_category IS NOT NULL",
+			);
 
 			addColumn("ALTER TABLE findings ADD COLUMN impact_tier TEXT");
 			addColumn("ALTER TABLE findings ADD COLUMN rejection_reason TEXT");
-			addColumn("ALTER TABLE findings ADD COLUMN verification_status TEXT DEFAULT 'none'");
+			addColumn(
+				"ALTER TABLE findings ADD COLUMN verification_status TEXT DEFAULT 'none'",
+			);
 			addColumn("ALTER TABLE findings ADD COLUMN verifier_explanation TEXT");
 
 			// Rename hunt_prompt → category/user_prompt
-			addColumn("ALTER TABLE games ADD COLUMN category TEXT NOT NULL DEFAULT 'bugs'");
+			addColumn(
+				"ALTER TABLE games ADD COLUMN category TEXT NOT NULL DEFAULT 'bugs'",
+			);
 			addColumn("ALTER TABLE games ADD COLUMN user_prompt TEXT");
-			tryExec("UPDATE games SET user_prompt = hunt_prompt WHERE user_prompt IS NULL AND hunt_prompt IS NOT NULL");
+			tryExec(
+				"UPDATE games SET user_prompt = hunt_prompt WHERE user_prompt IS NULL AND hunt_prompt IS NOT NULL",
+			);
 		})();
 	}
 

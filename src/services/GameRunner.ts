@@ -13,8 +13,8 @@ import {
 	createRefereeValidationTools,
 } from "../agents/tools/referee-tools.js";
 import { createReviewTools } from "../agents/tools/review-tools.js";
-import { createVerifierTools } from "../agents/tools/verifier-tools.js";
 import type { PathFilter } from "../agents/tools/shared.js";
+import { createVerifierTools } from "../agents/tools/verifier-tools.js";
 import type { Orchestrator, SetupConfig } from "./Orchestrator.js";
 
 // ---------------------------------------------------------------------------
@@ -56,7 +56,13 @@ export type GameEvent =
 	| { type: "dispute_scoring_start"; round: number; disputeCount: number }
 	| { type: "dispute_resolved"; disputeId: number; verdict: string }
 	| { type: "dispute_scoring_end"; round: number }
-	| { type: "round_complete"; round: number; action: string; winner?: string; reason: string }
+	| {
+			type: "round_complete";
+			round: number;
+			action: string;
+			winner?: string;
+			reason: string;
+	  }
 	| { type: "game_complete"; winner: string; reason: string; totalCost: Usage }
 	| { type: "agent_event"; agentId: string; role: string; event: AgentEvent };
 
@@ -125,14 +131,25 @@ export class GameRunner {
 
 			// ── 2. Hunt phase ──────────────────────────────────────────
 			const huntResult = this.orchestrator.startHunt(gameId);
-			yield { type: "hunt_start", round: huntResult.round, agentCount: huntResult.agents.length };
+			yield {
+				type: "hunt_start",
+				round: huntResult.round,
+				agentCount: huntResult.agents.length,
+			};
 
 			const huntAgentResults = await this.runParallelAgents(
 				huntResult.agents,
 				"hunt",
 				config.agentModel,
 				config.agentThinking,
-				(agentId) => createHuntTools(this.orchestrator, gameId, agentId, this.projectPath, this.pathFilter),
+				(agentId) =>
+					createHuntTools(
+						this.orchestrator,
+						gameId,
+						agentId,
+						this.projectPath,
+						this.pathFilter,
+					),
 				huntResult.durationSeconds,
 			);
 
@@ -145,7 +162,11 @@ export class GameRunner {
 
 			// ── 3. Hunt scoring — referee validates each finding ──────
 			const scoringResult = this.orchestrator.startHuntScoring(gameId);
-			yield { type: "scoring_start", round: scoringResult.round, findingCount: scoringResult.pendingFindings };
+			yield {
+				type: "scoring_start",
+				round: scoringResult.round,
+				findingCount: scoringResult.pendingFindings,
+			};
 
 			for (const validation of scoringResult.findingValidations) {
 				const result = await this.runTimedAgent(
@@ -153,14 +174,27 @@ export class GameRunner {
 					"referee",
 					"You are a code review referee. Validate findings by reading the actual code and making a verdict. Use the validate_finding tool to submit your verdict.",
 					validation.prompt,
-					createRefereeValidationTools(this.orchestrator, gameId, this.projectPath, this.pathFilter),
+					createRefereeValidationTools(
+						this.orchestrator,
+						gameId,
+						this.projectPath,
+						this.pathFilter,
+					),
 					refereeModel,
 					config.refereeThinking,
 					REFEREE_TIMEOUT_SECS,
 				);
 
-				this.logAgentResult(`referee-${validation.findingId}`, "referee", result);
-				yield { type: "finding_validated", findingId: validation.findingId, verdict: "processed" };
+				this.logAgentResult(
+					`referee-${validation.findingId}`,
+					"referee",
+					result,
+				);
+				yield {
+					type: "finding_validated",
+					findingId: validation.findingId,
+					verdict: "processed",
+				};
 			}
 
 			yield { type: "scoring_end", round: scoringResult.round };
@@ -176,14 +210,27 @@ export class GameRunner {
 						"verifier",
 						"You are an independent code verifier. Determine if this finding is a valid issue. Use the verify_finding tool to submit your verdict.",
 						finding.prompt,
-						createVerifierTools(this.orchestrator, gameId, this.projectPath, this.pathFilter),
+						createVerifierTools(
+							this.orchestrator,
+							gameId,
+							this.projectPath,
+							this.pathFilter,
+						),
 						refereeModel,
 						config.refereeThinking,
 						VERIFIER_TIMEOUT_SECS,
 					);
 
-					this.logAgentResult(`verifier-${finding.findingId}`, "verifier", result);
-					yield { type: "finding_verified", findingId: finding.findingId, confirmed: true };
+					this.logAgentResult(
+						`verifier-${finding.findingId}`,
+						"verifier",
+						result,
+					);
+					yield {
+						type: "finding_verified",
+						findingId: finding.findingId,
+						confirmed: true,
+					};
 				}
 
 				yield { type: "verification_end" };
@@ -191,14 +238,25 @@ export class GameRunner {
 
 			// ── 5. Review phase — dispute other agents' findings ──────
 			const reviewResult = this.orchestrator.startReview(gameId);
-			yield { type: "review_start", round: reviewResult.round, agentCount: reviewResult.agents.length };
+			yield {
+				type: "review_start",
+				round: reviewResult.round,
+				agentCount: reviewResult.agents.length,
+			};
 
 			const reviewAgentResults = await this.runParallelAgents(
 				reviewResult.agents,
 				"review",
 				config.agentModel,
 				config.agentThinking,
-				(agentId) => createReviewTools(this.orchestrator, gameId, agentId, this.projectPath, this.pathFilter),
+				(agentId) =>
+					createReviewTools(
+						this.orchestrator,
+						gameId,
+						agentId,
+						this.projectPath,
+						this.pathFilter,
+					),
 				reviewResult.durationSeconds,
 			);
 
@@ -211,7 +269,11 @@ export class GameRunner {
 
 			// ── 6. Review scoring — referee resolves disputes ─────────
 			const disputeResult = this.orchestrator.startReviewScoring(gameId);
-			yield { type: "dispute_scoring_start", round: disputeResult.round, disputeCount: disputeResult.pendingDisputes };
+			yield {
+				type: "dispute_scoring_start",
+				round: disputeResult.round,
+				disputeCount: disputeResult.pendingDisputes,
+			};
 
 			for (const resolution of disputeResult.disputeResolutions) {
 				const result = await this.runTimedAgent(
@@ -219,24 +281,48 @@ export class GameRunner {
 					"referee",
 					"You are a code review referee. Resolve this dispute by reading the code and determining who is correct. Use the resolve_dispute tool to submit your verdict.",
 					resolution.prompt,
-					createRefereeResolutionTools(this.orchestrator, gameId, this.projectPath, this.pathFilter),
+					createRefereeResolutionTools(
+						this.orchestrator,
+						gameId,
+						this.projectPath,
+						this.pathFilter,
+					),
 					refereeModel,
 					config.refereeThinking,
 					DISPUTE_TIMEOUT_SECS,
 				);
 
-				this.logAgentResult(`referee-dispute-${resolution.disputeId}`, "referee", result);
-				yield { type: "dispute_resolved", disputeId: resolution.disputeId, verdict: "processed" };
+				this.logAgentResult(
+					`referee-dispute-${resolution.disputeId}`,
+					"referee",
+					result,
+				);
+				yield {
+					type: "dispute_resolved",
+					disputeId: resolution.disputeId,
+					verdict: "processed",
+				};
 			}
 
 			yield { type: "dispute_scoring_end", round: disputeResult.round };
 
 			// ── 7. Check winner ───────────────────────────────────────
 			const winner = this.orchestrator.checkWinner(gameId);
-			yield { type: "round_complete", round: disputeResult.round, action: winner.action, winner: winner.winner, reason: winner.reason };
+			yield {
+				type: "round_complete",
+				round: disputeResult.round,
+				action: winner.action,
+				winner: winner.winner,
+				reason: winner.reason,
+			};
 
 			if (winner.action === "GAME_COMPLETE") {
-				yield { type: "game_complete", winner: winner.winner!, reason: winner.reason, totalCost: this.totalCost };
+				yield {
+					type: "game_complete",
+					winner: winner.winner!,
+					reason: winner.reason,
+					totalCost: this.totalCost,
+				};
 				break;
 			}
 		}
@@ -287,7 +373,9 @@ export class GameRunner {
 				if (outcome.status === "fulfilled") {
 					completed.push(outcome.value);
 				} else {
-					console.error(`[${role}] agent ${agents[i].agentId} failed: ${outcome.reason}`);
+					console.error(
+						`[${role}] agent ${agents[i].agentId} failed: ${outcome.reason}`,
+					);
 				}
 			}
 
@@ -372,9 +460,15 @@ You are in a TIMED COMPETITION. Submit findings FAST. Every turn you spend readi
 	 * @param role - Agent role
 	 * @param result - Completed agent result
 	 */
-	private logAgentResult(agentId: string, role: string, result: AgentRunResult): void {
+	private logAgentResult(
+		agentId: string,
+		role: string,
+		result: AgentRunResult,
+	): void {
 		const cost = `$${result.totalUsage.cost.total.toFixed(4)}`;
-		const abort = result.aborted ? ` aborted=${result.abortReason ?? "unknown"}` : "";
+		const abort = result.aborted
+			? ` aborted=${result.abortReason ?? "unknown"}`
+			: "";
 		const err = result.error ? ` error=${result.error}` : "";
 
 		// Summarize tool usage

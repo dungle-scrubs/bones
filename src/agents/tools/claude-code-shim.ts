@@ -16,11 +16,7 @@ import { Type } from "@sinclair/typebox";
  * @param label - Display label
  * @param redirect - Message telling the model which real tool to use
  */
-function shim(
-	name: string,
-	label: string,
-	redirect: string,
-): AgentTool {
+function shim(name: string, label: string, redirect: string): AgentTool {
 	return {
 		name,
 		label,
@@ -38,12 +34,32 @@ function shim(
 
 /** Claude Code core tools that must appear in OAuth requests. */
 const SHIM_TOOLS: AgentTool[] = [
-	shim("read", "Read", "Do not use this tool. Use view_file instead to read files."),
-	shim("write", "Write", "Do not use this tool. Writing files is not available."),
+	shim(
+		"read",
+		"Read",
+		"Do not use this tool. Use view_file instead to read files.",
+	),
+	shim(
+		"write",
+		"Write",
+		"Do not use this tool. Writing files is not available.",
+	),
 	shim("edit", "Edit", "Do not use this tool. Editing files is not available."),
-	shim("bash", "Bash", "Do not use this tool. Use search_code to search the codebase and view_file to read files."),
-	shim("grep", "Grep", "Do not use this tool. Use search_code instead to search."),
-	shim("glob", "Glob", "Do not use this tool. Use search_code instead to find files."),
+	shim(
+		"bash",
+		"Bash",
+		"Do not use this tool. Use search_code to search the codebase and view_file to read files.",
+	),
+	shim(
+		"grep",
+		"Grep",
+		"Do not use this tool. Use search_code instead to search.",
+	),
+	shim(
+		"glob",
+		"Glob",
+		"Do not use this tool. Use search_code instead to find files.",
+	),
 ];
 
 /**

@@ -6,7 +6,11 @@
 import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
 import { Type } from "@sinclair/typebox";
 import type { Orchestrator } from "../../services/Orchestrator.js";
-import { type PathFilter, createReadFileTool, createSearchCodeTool } from "./shared.js";
+import {
+	createReadFileTool,
+	createSearchCodeTool,
+	type PathFilter,
+} from "./shared.js";
 
 /**
  * Creates the full set of tools available to a review agent.

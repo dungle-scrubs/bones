@@ -100,7 +100,10 @@ program
 	.option("--review-duration <seconds>", "Review phase duration", "180")
 	.option("--thinking <level>", "Agent thinking level", "medium")
 	.option("--referee-thinking <level>", "Referee thinking level", "high")
-	.option("--include <paths...>", "Only search these directories (e.g. src/ lib/)")
+	.option(
+		"--include <paths...>",
+		"Only search these directories (e.g. src/ lib/)",
+	)
 	.option("--exclude <paths...>", "Additional directories to exclude")
 	.option("--auth <method>", "Auth method: oauth")
 	.action(async (projectPath: string, opts) => {

@@ -65,7 +65,9 @@ export class FindingRepository {
 
 		const id = Number(result.lastInsertRowid);
 		if (!Number.isFinite(id) || id <= 0) {
-			throw new Error(`Failed to insert finding: invalid lastInsertRowid ${result.lastInsertRowid}`);
+			throw new Error(
+				`Failed to insert finding: invalid lastInsertRowid ${result.lastInsertRowid}`,
+			);
 		}
 
 		return Finding.create(

@@ -26,8 +26,8 @@ export const DEFAULT_EXCLUDE_DIRS = [
 	"__pycache__",
 	".venv",
 	"venv",
-	"target",       // rust
-	"vendor",       // go
+	"target", // rust
+	"vendor", // go
 	".turbo",
 ];
 
@@ -82,7 +82,11 @@ function resolveExcludes(filter?: PathFilter): string[] {
  * @param filter - Optional include patterns
  * @returns true if the path is allowed
  */
-function isPathAllowed(relPath: string, excludes: string[], filter?: PathFilter): boolean {
+function isPathAllowed(
+	relPath: string,
+	excludes: string[],
+	filter?: PathFilter,
+): boolean {
 	const parts = relPath.split("/");
 
 	// Check excludes — any path segment matching an excluded dir is blocked
@@ -110,7 +114,10 @@ function isPathAllowed(relPath: string, excludes: string[], filter?: PathFilter)
  * @param filter - Optional include/exclude path filters
  * @returns AgentTool that reads files within the project
  */
-export function createReadFileTool(projectPath: string, filter?: PathFilter): AgentTool {
+export function createReadFileTool(
+	projectPath: string,
+	filter?: PathFilter,
+): AgentTool {
 	const excludes = resolveExcludes(filter);
 
 	return {
@@ -141,7 +148,12 @@ export function createReadFileTool(projectPath: string, filter?: PathFilter): Ag
 			// Prevent path traversal outside project
 			if (!fullPath.startsWith(resolve(projectPath))) {
 				return {
-					content: [{ type: "text", text: `Error: path outside project: ${params.path}` }],
+					content: [
+						{
+							type: "text",
+							text: `Error: path outside project: ${params.path}`,
+						},
+					],
 					details: { path: params.path, lineCount: 0 },
 				};
 			}
@@ -149,7 +161,12 @@ export function createReadFileTool(projectPath: string, filter?: PathFilter): Ag
 			// Check path filter
 			if (!isPathAllowed(params.path, excludes, filter)) {
 				return {
-					content: [{ type: "text", text: `Excluded path: ${params.path}. Only source files are searchable.` }],
+					content: [
+						{
+							type: "text",
+							text: `Excluded path: ${params.path}. Only source files are searchable.`,
+						},
+					],
 					details: { path: params.path, lineCount: 0 },
 				};
 			}
@@ -200,12 +217,19 @@ export function createReadFileTool(projectPath: string, filter?: PathFilter): Ag
  * @param filter - Optional include/exclude path filters
  * @returns AgentTool that searches code within the project
  */
-export function createSearchCodeTool(projectPath: string, filter?: PathFilter): AgentTool {
+export function createSearchCodeTool(
+	projectPath: string,
+	filter?: PathFilter,
+): AgentTool {
 	const excludes = resolveExcludes(filter);
 
 	// Build grep --exclude-dir flags
-	const excludeDirFlags = excludes.map((d) => `--exclude-dir=${JSON.stringify(d)}`).join(" ");
-	const excludeFileFlags = EXCLUDE_FILES.map((f) => `--exclude=${JSON.stringify(f)}`).join(" ");
+	const excludeDirFlags = excludes
+		.map((d) => `--exclude-dir=${JSON.stringify(d)}`)
+		.join(" ");
+	const excludeFileFlags = EXCLUDE_FILES.map(
+		(f) => `--exclude=${JSON.stringify(f)}`,
+	).join(" ");
 
 	return {
 		name: "search_code",
@@ -244,7 +268,9 @@ export function createSearchCodeTool(projectPath: string, filter?: PathFilter): 
 			for (const p of searchPaths) {
 				if (!p.startsWith(resolvedRoot)) {
 					return {
-						content: [{ type: "text", text: "Error: path traversal outside project" }],
+						content: [
+							{ type: "text", text: "Error: path traversal outside project" },
+						],
 						details: { matchCount: 0 },
 					};
 				}

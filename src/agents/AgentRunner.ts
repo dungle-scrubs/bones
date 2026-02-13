@@ -108,7 +108,11 @@ export async function runAgent(
 
 			// Log LLM errors (rate limits, auth failures, etc.)
 			const msg = event.message;
-			if ("role" in msg && msg.role === "assistant" && (msg as any).errorMessage) {
+			if (
+				"role" in msg &&
+				msg.role === "assistant" &&
+				(msg as any).errorMessage
+			) {
 				console.error(`[${agentId}] LLM error: ${(msg as any).errorMessage}`);
 			}
 
@@ -155,5 +159,14 @@ export async function runAgent(
 		unsubscribe();
 	}
 
-	return { agentId, role, turnCount, totalUsage, aborted, abortReason, error, toolCalls };
+	return {
+		agentId,
+		role,
+		turnCount,
+		totalUsage,
+		aborted,
+		abortReason,
+		error,
+		toolCalls,
+	};
 }

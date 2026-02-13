@@ -12,7 +12,7 @@ import type {
 	RejectionReason,
 } from "../../domain/types.js";
 import type { Orchestrator } from "../../services/Orchestrator.js";
-import { type PathFilter, createReadFileTool } from "./shared.js";
+import { createReadFileTool, type PathFilter } from "./shared.js";
 
 /**
  * Creates the tool for validating a single finding.
