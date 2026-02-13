@@ -36,6 +36,22 @@ Setup → Hunt → HuntScoring → Review → ReviewScoring → (loop or Complet
 | Dispute won | +2 |
 | Dispute lost | -1 |
 
+### Design Philosophy: Incentives Over Instructions
+
+The review phase does not prompt agents to treat findings as suspect. The scoring
+system already creates that pressure — a successful dispute earns +2 while a
+failed one costs -1, so agents are naturally incentivized to be skeptical but
+selective. Layering "assume everything is questionable" on top of those mechanics
+would stack prompt bias onto game-theoretic incentive, producing carpet-bomb
+disputes and noisy referee queues rather than careful analysis.
+
+Instead, the system demands **structured counter-evidence**: every dispute must
+articulate a specific, testable counter-argument (e.g., "this path is unreachable
+because X" or "this is handled in file Y"). This filters out lazy disputes
+without biasing the overall posture. The distinction is the same one auditors
+draw between professional skepticism — evaluate rigorously — and reflexive
+rejection. The first produces signal; the second produces noise.
+
 ## Requirements
 
 - [Bun](https://bun.sh/) v1.1+
