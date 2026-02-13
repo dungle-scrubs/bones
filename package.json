@@ -2,11 +2,32 @@
 	"name": "bones",
 	"version": "2.0.0",
 	"type": "module",
-	"description": "Competitive code review game - hunt for bugs, doc drift, security issues, and more",
+	"description": "Competitive multi-agent code review game — LLM agents hunt for bugs, security issues, doc drift, and more",
 	"bin": {
 		"bones": "./dist/cli.js"
 	},
 	"main": "dist/cli.js",
+	"files": [
+		"dist",
+		"scripts"
+	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/dungle-scrubs/bones.git"
+	},
+	"author": "Kevin Frilot",
+	"license": "MIT",
+	"keywords": [
+		"code-review",
+		"agents",
+		"llm",
+		"claude",
+		"multi-agent",
+		"competitive",
+		"bugs",
+		"security",
+		"cli"
+	],
 	"scripts": {
 		"build": "tsc",
 		"dev": "bun src/cli.ts",
@@ -30,7 +51,7 @@
 		"@mariozechner/pi-ai": "^0.52.9",
 		"@sinclair/typebox": "^0.34.48",
 		"commander": "^14.0.3",
-		"hono": "^4.7.6",
+		"hono": "^4.11.9",
 		"ink": "^6.6.0",
 		"react": "^19.2.3"
 	},
