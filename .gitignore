@@ -1,12 +1,36 @@
+# Dependencies
 node_modules/
+
+# Build output
 dist/
 .next/
+
+# Runtime data
 *.db
 logs/
-.words_hurt/
+
+# OS
 .DS_Store
+*.swp
+*~
+
+# Environment
+.env
+.env.local
+
+# IDE
+.idea/
+*.xcuserdata/
+
+# Agent/AI tooling
 .tallow/
 .claude/
+.pi/
 PLAN.md
 CLAUDE.md
 AGENTS.md
+SKILL.md
+ROADMAP.md
+
+# Internal
+.words_hurt/
