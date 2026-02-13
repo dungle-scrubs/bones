@@ -33,11 +33,12 @@ export function createReviewTools(
 		name: "submit_dispute",
 		label: "Submit Dispute",
 		description:
-			"Dispute a finding you believe is invalid. Provide the finding ID and your reasoning.",
+			"Dispute a finding you believe is invalid. You must provide a specific, testable counter-argument — not a vague objection. Include concrete evidence: file paths, line numbers, guard clauses, or type constraints that disprove the finding.",
 		parameters: Type.Object({
 			finding_id: Type.Number({ description: "ID of the finding to dispute" }),
 			reason: Type.String({
-				description: "Detailed reasoning for why this finding is invalid",
+				description:
+					"Specific counter-argument with concrete evidence (e.g., 'The null check on line 42 prevents this path'). Vague objections will be rejected by the referee.",
 			}),
 		}),
 		async execute(

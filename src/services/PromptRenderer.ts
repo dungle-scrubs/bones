@@ -208,7 +208,21 @@ You have these tools:
 4. **mark_done** — Signal you're finished reviewing
 
 **Strategy:** For each finding, read the actual code at the referenced location.
-If the finding is wrong, dispute it. Successful disputes earn **+2**, failed disputes cost **-1**.
+Successful disputes earn **+2**, failed disputes cost **-1**.
+
+## Dispute Requirements
+
+Every dispute **must** include a specific, testable counter-argument. Vague objections will fail. Your reason must contain at least one of:
+
+- **Unreachable path** — Show why the code path cannot be reached (e.g., a guard clause, type constraint, or caller that prevents it)
+- **Already handled** — Point to the specific file and line where the issue is addressed
+- **Incorrect reading** — Explain what the code actually does vs. what the finding claims, with concrete evidence
+- **Wrong scope** — Demonstrate the finding targets dead code, test fixtures, or generated output
+
+**Bad dispute:** "This doesn't seem like a real bug"
+**Good dispute:** "The null check on line 42 of auth.ts prevents this path — the finding assumes \`user\` can be null after the guard at line 38"
+
+Do NOT dispute findings just because you can. Only dispute when you have concrete evidence the finding is wrong.
 
 Call **mark_done** when finished.
 `;
@@ -393,11 +407,21 @@ ${vars.disputeReason}
 
 ## Task
 1. Use **view_file** to read the code at ${vars.filePath}:${vars.lineStart}–${vars.lineEnd}
-2. Evaluate the original finding against the dispute
-3. Use the **resolve_dispute** tool with your verdict
+2. Check that the dispute provides a **specific, testable counter-argument** — not a vague objection
+3. Verify the counter-argument against the actual code
+4. Use the **resolve_dispute** tool with your verdict
 
-**SUCCESSFUL** = Disputer was right, finding is invalid
-**FAILED** = Finding was correct, dispute fails
+## Dispute Quality Gate
+
+A dispute must contain concrete evidence such as:
+- A specific code path, guard clause, or type constraint that prevents the issue
+- A file and line where the issue is already handled
+- A factual correction of what the code does vs. what the finding claims
+
+Disputes that only express doubt ("this doesn't seem like a real bug", "this is unlikely") without testable evidence should be marked **FAILED** regardless of the finding's quality.
+
+**SUCCESSFUL** = Disputer provided valid evidence that the finding is incorrect
+**FAILED** = Finding stands — dispute lacks evidence or evidence is wrong
 `;
 	}
 
