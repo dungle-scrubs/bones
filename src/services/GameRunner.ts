@@ -87,14 +87,22 @@ export class GameRunner {
 	private totalCost: Usage;
 	private apiKey?: string;
 	private pathFilter?: PathFilter;
+	private silent: boolean;
 
 	/**
 	 * @param orchestrator - Existing Orchestrator with database connection
 	 * @param projectPath - Absolute path to the target project on disk
+	 * @param options - Optional configuration
+	 * @param options.silent - Suppress stderr logging (for TUI mode)
 	 */
-	constructor(orchestrator: Orchestrator, projectPath: string) {
+	constructor(
+		orchestrator: Orchestrator,
+		projectPath: string,
+		options?: { silent?: boolean },
+	) {
 		this.orchestrator = orchestrator;
 		this.projectPath = projectPath;
+		this.silent = options?.silent ?? false;
 		this.totalCost = {
 			input: 0,
 			output: 0,
@@ -372,7 +380,7 @@ export class GameRunner {
 				const outcome = settled[i];
 				if (outcome.status === "fulfilled") {
 					completed.push(outcome.value);
-				} else {
+				} else if (!this.silent) {
 					console.error(
 						`[${role}] agent ${agents[i].agentId} failed: ${outcome.reason}`,
 					);
@@ -462,9 +470,11 @@ You are in a TIMED COMPETITION. Submit findings FAST. Every turn you spend readi
 	 */
 	private logAgentResult(
 		agentId: string,
-		role: string,
+		_role: string,
 		result: AgentRunResult,
 	): void {
+		if (this.silent) return;
+
 		const cost = `$${result.totalUsage.cost.total.toFixed(4)}`;
 		const abort = result.aborted
 			? ` aborted=${result.abortReason ?? "unknown"}`

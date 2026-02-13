@@ -815,13 +815,31 @@ export class Commands {
 			pathFilter,
 		};
 
-		const runner = new GameRunner(this.orchestrator, resolvedPath);
+		const runner = new GameRunner(this.orchestrator, resolvedPath, {
+			silent: true,
+		});
+
+		// Render live TUI via Ink
+		const { EventEmitter } = await import("node:events");
+		const { render } = await import("ink");
+		const React = await import("react");
+		const { LiveGameUI } = await import("./ui/LiveGameUI.js");
+
+		const emitter = new EventEmitter();
+		const { unmount } = render(
+			React.createElement(LiveGameUI, {
+				emitter,
+				orchestrator: this.orchestrator,
+			}),
+		);
+
+		let result = "";
 
 		for await (const event of runner.play(playConfig)) {
-			this.logGameEvent(event);
+			emitter.emit("game-event", event);
 
 			if (event.type === "game_complete") {
-				return JSON.stringify(
+				result = JSON.stringify(
 					{
 						winner: event.winner,
 						reason: event.reason,
@@ -836,7 +854,11 @@ export class Commands {
 			}
 		}
 
-		return JSON.stringify({ error: "Game ended without a winner" });
+		// Let TUI render final state before unmounting
+		await new Promise((resolve) => setTimeout(resolve, 2000));
+		unmount();
+
+		return result || JSON.stringify({ error: "Game ended without a winner" });
 	}
 
 	/**
