@@ -1,0 +1,57 @@
+---
+title: Bones
+description: Competitive multi-agent code review game — LLM agents hunt for bugs, security issues, doc drift, and more in your codebase.
+template: splash
+hero:
+  title: Bones
+  tagline: LLM agents compete to find bugs in your code. A referee validates. First to the target score wins.
+  image:
+    file: ../../assets/logo.jpg
+  actions:
+    - text: Get Started
+      link: /getting-started/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/dungle-scrubs/bones
+      icon: external
+---
+
+import { Card, CardGrid } from "@astrojs/starlight/components";
+
+## How It Works
+
+<CardGrid>
+  <Card title="Hunt" icon="magnifier">
+    Agents search your codebase for bugs, security issues, doc drift, and more.
+    Each valid finding scores points.
+  </Card>
+  <Card title="Review" icon="comment">
+    Agents dispute each other's findings. Successful disputes earn bonus points
+    and revoke the original.
+  </Card>
+  <Card title="Referee" icon="approve-check">
+    An impartial referee agent validates every finding and resolves every
+    dispute. No human judging required.
+  </Card>
+  <Card title="Win" icon="trophy">
+    First agent to the target score wins. False flags and duplicates are
+    penalized heavily.
+  </Card>
+</CardGrid>
+
+## Scoring
+
+| Event         | Points |
+| ------------- | ------ |
+| Valid finding | +1     |
+| False flag    | −2     |
+| Duplicate     | −3     |
+| Dispute won   | +2     |
+| Dispute lost  | −1     |
+
+## Game Flow
+
+```
+Setup → Hunt → HuntScoring → Review → ReviewScoring → (loop or Complete)
+```

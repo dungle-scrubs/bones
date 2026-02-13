@@ -1,0 +1,44 @@
+/*
+ * Bones docs — navy & gold theme derived from the icon palette.
+ *
+ * Navy background: oklch(0.18 0.03 260)
+ * Gold accent:     oklch(0.72 0.12 80)
+ * Ivory tile:      oklch(0.94 0.02 90)
+ * Dark pip:        oklch(0.20 0.04 260)
+ */
+
+:root {
+	/* Accent: warm gold pulled from the domino edge color */
+	--sl-color-accent-low: oklch(0.25 0.06 80);
+	--sl-color-accent: oklch(0.72 0.12 80);
+	--sl-color-accent-high: oklch(0.92 0.06 80);
+
+	--sl-color-white: oklch(0.94 0.02 90);
+	--sl-color-gray-1: oklch(0.85 0.015 260);
+	--sl-color-gray-2: oklch(0.72 0.015 260);
+	--sl-color-gray-3: oklch(0.52 0.02 260);
+	--sl-color-gray-4: oklch(0.32 0.025 260);
+	--sl-color-gray-5: oklch(0.22 0.03 260);
+	--sl-color-gray-6: oklch(0.18 0.03 260);
+	--sl-color-black: oklch(0.12 0.03 260);
+}
+
+:root[data-theme="light"] {
+	--sl-color-accent-low: oklch(0.92 0.06 80);
+	--sl-color-accent: oklch(0.55 0.14 80);
+	--sl-color-accent-high: oklch(0.22 0.06 80);
+
+	--sl-color-white: oklch(0.15 0.03 260);
+	--sl-color-gray-1: oklch(0.30 0.025 260);
+	--sl-color-gray-2: oklch(0.42 0.02 260);
+	--sl-color-gray-3: oklch(0.55 0.015 260);
+	--sl-color-gray-4: oklch(0.75 0.01 260);
+	--sl-color-gray-5: oklch(0.88 0.008 260);
+	--sl-color-gray-6: oklch(0.94 0.005 260);
+	--sl-color-black: oklch(0.98 0.005 90);
+}
+
+/* Tighten the nav logo */
+.site-title img {
+	border-radius: 6px;
+}
