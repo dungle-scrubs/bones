@@ -106,11 +106,16 @@ program
 	)
 	.option("--exclude <paths...>", "Additional directories to exclude")
 	.option("--auth <method>", "Auth method: oauth")
+	.addOption(
+		new Option("--output <mode>", "Output mode")
+			.choices(["tui", "json"])
+			.default("tui"),
+	)
 	.action(async (projectPath: string, opts) => {
 		const { commands, close } = createContext();
 		try {
 			const result = await commands.play(projectPath, opts);
-			console.log(result);
+			if (result) console.log(result);
 		} catch (error) {
 			console.error(JSON.stringify({ error: (error as Error).message }));
 			process.exit(1);

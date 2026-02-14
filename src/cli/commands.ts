@@ -45,6 +45,8 @@ export interface PlayOpts extends SetupOpts {
 	auth?: string;
 	include?: string[];
 	exclude?: string[];
+	/** Output mode: "tui" (interactive Ink dashboard) or "json" (NDJSON for programmatic use). */
+	output?: "tui" | "json";
 }
 
 /**
@@ -770,7 +772,9 @@ export class Commands {
 				});
 			}
 			oauthApiKey = key;
-			console.log("[auth]    Using Claude Pro/Max subscription (OAuth)");
+			if (opts.output !== "json") {
+				console.log("[auth]    Using Claude Pro/Max subscription (OAuth)");
+			}
 		} else if (!hasEnvKey) {
 			return JSON.stringify({
 				error:
@@ -815,11 +819,28 @@ export class Commands {
 			pathFilter,
 		};
 
-		const runner = new GameRunner(this.orchestrator, resolvedPath, {
+		if (opts.output === "json") {
+			return this.playJson(resolvedPath, playConfig);
+		}
+
+		return this.playTui(resolvedPath, playConfig);
+	}
+
+	/**
+	 * Runs the game with an interactive Ink TUI dashboard.
+	 *
+	 * @param projectPath - Resolved absolute path to the project
+	 * @param playConfig - Full play configuration
+	 * @returns JSON summary when game completes
+	 */
+	private async playTui(
+		projectPath: string,
+		playConfig: PlayConfig,
+	): Promise<string> {
+		const runner = new GameRunner(this.orchestrator, projectPath, {
 			silent: true,
 		});
 
-		// Render live TUI via Ink
 		const { EventEmitter } = await import("node:events");
 		const { render } = await import("ink");
 		const React = await import("react");
@@ -859,6 +880,180 @@ export class Commands {
 		unmount();
 
 		return result || JSON.stringify({ error: "Game ended without a winner" });
+	}
+
+	/**
+	 * Runs the game with NDJSON output for programmatic consumption.
+	 * Emits one JSON object per line for key events, enriched with DB data
+	 * at phase boundaries (findings, scores, disputes).
+	 *
+	 * @param projectPath - Resolved absolute path to the project
+	 * @param playConfig - Full play configuration
+	 * @returns Final JSON summary when game completes
+	 */
+	private async playJson(
+		projectPath: string,
+		playConfig: PlayConfig,
+	): Promise<string> {
+		const runner = new GameRunner(this.orchestrator, projectPath, {
+			silent: true,
+		});
+
+		/** Writes a single NDJSON line to stdout. */
+		const emit = (obj: Record<string, unknown>) => {
+			console.log(JSON.stringify(obj));
+		};
+
+		let gameId = "";
+		let result = "";
+
+		for await (const event of runner.play(playConfig)) {
+			switch (event.type) {
+				case "game_created":
+					gameId = event.gameId;
+					emit({
+						event: "game_created",
+						gameId: event.gameId,
+						agents: event.agents,
+					});
+					break;
+
+				case "round_start":
+					emit({ event: "round_start", round: event.round });
+					break;
+
+				case "hunt_start":
+					emit({
+						event: "hunt_start",
+						round: event.round,
+						agents: event.agentCount,
+					});
+					break;
+
+				case "hunt_agent_done":
+					emit({
+						event: "hunt_agent_done",
+						agent: event.agentId,
+						turns: event.result.turnCount,
+						cost: `$${event.result.totalUsage.cost.total.toFixed(4)}`,
+						aborted: event.result.aborted
+							? (event.result.abortReason ?? "unknown")
+							: undefined,
+						error: event.result.error ?? undefined,
+					});
+					break;
+
+				// After all findings scored — emit enriched summary from DB
+				case "scoring_end": {
+					const findings = this.orchestrator.getFindings(gameId);
+					const scoreboard = this.orchestrator.getScoreboard(gameId);
+					emit({
+						event: "scoring_end",
+						round: event.round,
+						findings: findings.map((f) => ({
+							id: f.id,
+							agent: f.agentId,
+							file: f.filePath,
+							lines: `${f.lineStart}-${f.lineEnd}`,
+							status: f.status,
+							description: f.description,
+						})),
+						scoreboard: scoreboard.map((e) => ({
+							agent: e.id,
+							score: e.score,
+							valid: e.findingsValid,
+							false: e.findingsFalse,
+							duplicate: e.findingsDuplicate,
+						})),
+					});
+					break;
+				}
+
+				case "review_agent_done":
+					emit({
+						event: "review_agent_done",
+						agent: event.agentId,
+						turns: event.result.turnCount,
+						cost: `$${event.result.totalUsage.cost.total.toFixed(4)}`,
+					});
+					break;
+
+				// After all disputes resolved — emit enriched summary from DB
+				case "dispute_scoring_end": {
+					const disputes = this.orchestrator.getDisputes(gameId);
+					const scoreboard = this.orchestrator.getScoreboard(gameId);
+					emit({
+						event: "dispute_scoring_end",
+						round: event.round,
+						disputes: disputes.map((d) => ({
+							id: d.id,
+							finding: d.findingId,
+							disputer: d.disputerId,
+							status: d.status,
+							reason: d.reason,
+						})),
+						scoreboard: scoreboard.map((e) => ({
+							agent: e.id,
+							score: e.score,
+							valid: e.findingsValid,
+							false: e.findingsFalse,
+							duplicate: e.findingsDuplicate,
+							disputesWon: e.disputesWon,
+							disputesLost: e.disputesLost,
+						})),
+					});
+					break;
+				}
+
+				case "round_complete":
+					emit({
+						event: "round_complete",
+						round: event.round,
+						action: event.action,
+						winner: event.winner ?? undefined,
+						reason: event.reason,
+					});
+					break;
+
+				case "game_complete": {
+					const finalScoreboard = this.orchestrator.getScoreboard(gameId);
+					const allFindings = this.orchestrator.getFindings(gameId);
+					result = JSON.stringify({
+						event: "game_complete",
+						winner: event.winner,
+						reason: event.reason,
+						cost: `$${event.totalCost.cost.total.toFixed(4)}`,
+						tokens: event.totalCost.totalTokens,
+						scoreboard: finalScoreboard.map((e) => ({
+							agent: e.id,
+							score: e.score,
+							valid: e.findingsValid,
+							false: e.findingsFalse,
+							duplicate: e.findingsDuplicate,
+							disputesWon: e.disputesWon,
+							disputesLost: e.disputesLost,
+						})),
+						findings: allFindings.map((f) => ({
+							id: f.id,
+							agent: f.agentId,
+							file: f.filePath,
+							lines: `${f.lineStart}-${f.lineEnd}`,
+							status: f.status,
+							description: f.description,
+						})),
+					});
+					console.log(result);
+					break;
+				}
+
+				// Skip noisy per-finding/per-dispute events — summaries above cover them
+				default:
+					break;
+			}
+		}
+
+		// Return empty string — all output already emitted via console.log
+		return "";
 	}
 
 	/**
