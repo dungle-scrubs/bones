@@ -1,5 +1,10 @@
 name: CI
-on: [push, pull_request]
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 jobs:
   secrets:
@@ -12,21 +17,52 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  lockfile-guardrail:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reject non-Bun lockfiles
+        run: |
+          bad="$(git ls-files | grep -E '(^|/)(package-lock\.json|pnpm-lock\.yaml|yarn.lock)$' || true)"
+          if [ -n "$bad" ]; then
+            echo "::error::Non-Bun lockfiles tracked in git:"
+            echo "$bad"
+            exit 1
+          fi
+
   build:
+    needs: lockfile-guardrail
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: "1.3.9"
 
       - run: bun install --frozen-lockfile
 
-      - run: bun run lint
+      - name: Lint
+        run: bunx biome ci .
 
-      - run: bun run typecheck
+      - name: Typecheck
+        run: bun run typecheck
 
-      - run: bun test
+      - name: Build
+        run: bun run build
 
-      - run: bun run build
+  test:
+    needs: lockfile-guardrail
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.9"
+
+      - run: bun install --frozen-lockfile
+
+      - name: Test
+        run: bun test
