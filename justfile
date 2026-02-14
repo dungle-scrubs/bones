@@ -56,7 +56,7 @@ init:
 build:
     bun run build
 
-# Run all tests (115 tests, bun:test)
+# Run all tests (bun:test)
 test:
     bun test
 
@@ -113,6 +113,22 @@ play-full project:
 # Usage: just play-custom /path/to/project "Find all SQL injection vectors"
 play-custom project prompt:
     bones play "{{project}}" -c custom -p "{{prompt}}" -a 2 -t 3 -m 1
+
+# ─── Play games (JSON output for LLM agents) ─────────────────
+
+# Run a quick game with NDJSON output (no TUI)
+# Usage: just play-json /path/to/project
+play-json project:
+    bones play "{{project}}" -c bugs -a 2 -t 3 -m 1 --output json
+
+# Run a game with NDJSON output and specific category
+# Usage: just play-json-cat /path/to/project security
+play-json-cat project category:
+    bones play "{{project}}" -c "{{category}}" -a 2 -t 3 -m 1 --output json
+
+# Run a full game with NDJSON output
+play-json-full project:
+    bones play "{{project}}" --output json
 
 # ─── Dashboard ────────────────────────────────────────────────
 
