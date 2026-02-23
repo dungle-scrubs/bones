@@ -1,11 +1,11 @@
 "use client";
 
-import { AlertCircle, Home, RefreshCw } from "lucide-react";
+import { Home, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 
-export default function Error({
+export default function ErrorPage({
 	error,
 	reset,
 }: {
@@ -19,18 +19,15 @@ export default function Error({
 	return (
 		<main className="min-h-screen flex items-center justify-center p-6">
 			<div className="text-center space-y-4 max-w-md">
-				<div className="flex items-center justify-center gap-2 text-invalid">
-					<AlertCircle className="h-6 w-6" />
-					<span className="font-display text-xl font-semibold uppercase tracking-wider">
-						Application Error
-					</span>
-				</div>
-				<p className="text-sm text-muted-foreground font-mono">
+				<h1 className="font-display text-2xl font-bold">
+					Something went wrong
+				</h1>
+				<p className="text-sm text-muted-foreground">
 					{error.message || "An unexpected error occurred"}
 				</p>
 				{error.digest && (
-					<p className="text-xs text-muted-foreground/60 font-mono">
-						Error ID: {error.digest}
+					<p className="text-xs text-muted-foreground/50 font-mono">
+						{error.digest}
 					</p>
 				)}
 				<div className="flex items-center justify-center gap-3 pt-4">

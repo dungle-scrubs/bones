@@ -81,8 +81,8 @@ const STATUS_CONFIG: Record<
 	}
 > = {
 	valid: { label: "Valid", icon: CheckCircle, variant: "valid" },
-	false_flag: { label: "False Flag", icon: XCircle, variant: "invalid" },
-	duplicate: { label: "Duplicate", icon: Copy, variant: "duplicate" },
+	false_flag: { label: "False", icon: XCircle, variant: "invalid" },
+	duplicate: { label: "Dupe", icon: Copy, variant: "duplicate" },
 	pending: { label: "Pending", icon: Clock, variant: "pending" },
 };
 
@@ -92,19 +92,20 @@ function StatusBadge({ status }: { status: FindingStatus }) {
 
 	return (
 		<Badge variant={config.variant} className="gap-1">
-			<Icon className="h-3 w-3" />
+			<Icon className="h-2.5 w-2.5" />
 			{config.label}
 		</Badge>
 	);
 }
 
-function PointsBadge({ points }: { points: number }) {
-	if (points === 0) return <span className="text-muted-foreground">-</span>;
+function PointsDisplay({ points }: { points: number }) {
+	if (points === 0)
+		return <span className="text-muted-foreground/30 font-mono">—</span>;
 
 	return (
 		<span
 			className={cn(
-				"font-semibold tabular-nums",
+				"font-mono font-semibold tabular-nums",
 				points > 0 ? "text-valid" : "text-invalid",
 			)}
 		>
@@ -118,28 +119,18 @@ const CONFIDENCE_CONFIG: Record<
 	Confidence,
 	{ label: string; className: string }
 > = {
-	high: { label: "High", className: "bg-valid/20 text-valid border-valid/30" },
-	medium: {
-		label: "Med",
-		className: "bg-yellow-500/20 text-yellow-500 border-yellow-500/30",
-	},
-	low: {
-		label: "Low",
-		className: "bg-orange-500/20 text-orange-500 border-orange-500/30",
-	},
+	high: { label: "H", className: "text-valid" },
+	medium: { label: "M", className: "text-duplicate" },
+	low: { label: "L", className: "text-invalid" },
 };
 
-function ConfidenceBadge({ confidence }: { confidence: Confidence | null }) {
-	if (!confidence)
-		return <span className="text-muted-foreground text-xs">-</span>;
+function ConfidenceLabel({ confidence }: { confidence: Confidence | null }) {
+	if (!confidence) return <span className="text-muted-foreground/30">—</span>;
 
 	const config = CONFIDENCE_CONFIG[confidence];
 	return (
 		<span
-			className={cn(
-				"text-[10px] px-1.5 py-0.5 border font-medium uppercase tracking-wider",
-				config.className,
-			)}
+			className={cn("text-[10px] font-mono font-semibold", config.className)}
 		>
 			{config.label}
 		</span>
@@ -171,22 +162,22 @@ export function FindingsTable({ gameId }: FindingsTableProps) {
 					<Button
 						variant="ghost"
 						size="sm"
-						className="-ml-3 h-8 data-[state=open]:bg-accent"
+						className="-ml-3 h-7"
 						onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
 					>
-						ID
+						#
 						{column.getIsSorted() === "asc" ? (
 							<ArrowUp className="ml-1 h-3 w-3" />
 						) : column.getIsSorted() === "desc" ? (
 							<ArrowDown className="ml-1 h-3 w-3" />
 						) : (
-							<ArrowUpDown className="ml-1 h-3 w-3 opacity-50" />
+							<ArrowUpDown className="ml-1 h-3 w-3 opacity-30" />
 						)}
 					</Button>
 				),
 				cell: ({ row }) => (
-					<span className="font-mono text-muted-foreground">
-						#{row.original.id}
+					<span className="font-mono text-xs text-muted-foreground">
+						{row.original.id}
 					</span>
 				),
 			},
@@ -199,14 +190,14 @@ export function FindingsTable({ gameId }: FindingsTableProps) {
 				accessorKey: "confidence",
 				header: "Conf",
 				cell: ({ row }) => (
-					<ConfidenceBadge confidence={row.original.confidence} />
+					<ConfidenceLabel confidence={row.original.confidence} />
 				),
 			},
 			{
 				accessorKey: "agentId",
 				header: "Agent",
 				cell: ({ row }) => (
-					<span className="font-mono text-xs">
+					<span className="text-sm font-medium">
 						{formatAgentName(row.original.agentId)}
 					</span>
 				),
@@ -219,8 +210,8 @@ export function FindingsTable({ gameId }: FindingsTableProps) {
 						<span className="font-mono text-xs text-muted-foreground truncate block">
 							{row.original.filePath.split("/").slice(-2).join("/")}
 						</span>
-						<span className="font-mono text-[10px] text-muted-foreground/70">
-							L{row.original.lineStart}-{row.original.lineEnd}
+						<span className="font-mono text-[10px] text-muted-foreground/50">
+							L{row.original.lineStart}–{row.original.lineEnd}
 						</span>
 					</div>
 				),
@@ -230,7 +221,7 @@ export function FindingsTable({ gameId }: FindingsTableProps) {
 				header: "Description",
 				cell: ({ row }) => (
 					<div
-						className="max-w-[300px] truncate"
+						className="max-w-[300px] truncate text-sm"
 						title={row.original.description}
 					>
 						{row.original.description}
@@ -243,26 +234,26 @@ export function FindingsTable({ gameId }: FindingsTableProps) {
 					<Button
 						variant="ghost"
 						size="sm"
-						className="-ml-3 h-8 data-[state=open]:bg-accent"
+						className="-ml-3 h-7"
 						onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
 					>
-						Points
+						Pts
 						{column.getIsSorted() === "asc" ? (
 							<ArrowUp className="ml-1 h-3 w-3" />
 						) : column.getIsSorted() === "desc" ? (
 							<ArrowDown className="ml-1 h-3 w-3" />
 						) : (
-							<ArrowUpDown className="ml-1 h-3 w-3 opacity-50" />
+							<ArrowUpDown className="ml-1 h-3 w-3 opacity-30" />
 						)}
 					</Button>
 				),
-				cell: ({ row }) => <PointsBadge points={row.original.points} />,
+				cell: ({ row }) => <PointsDisplay points={row.original.points} />,
 			},
 			{
 				accessorKey: "round",
-				header: "Rnd",
+				header: "R",
 				cell: ({ row }) => (
-					<span className="text-muted-foreground tabular-nums">
+					<span className="font-mono text-xs text-muted-foreground tabular-nums">
 						{row.original.round}
 					</span>
 				),
@@ -316,40 +307,34 @@ export function FindingsTable({ gameId }: FindingsTableProps) {
 
 	if (isLoading) {
 		return (
-			<div className="border border-border bg-card p-6">
-				<div className="flex items-center gap-2 text-muted-foreground text-sm">
-					<div className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-					Loading findings...
-				</div>
+			<div className="py-6">
+				<p className="text-sm text-muted-foreground">Loading findings…</p>
 			</div>
 		);
 	}
 
 	return (
-		<div className="border border-border bg-card">
+		<div>
 			{/* Header */}
-			<div className="flex items-center justify-between px-4 py-3 border-b border-border">
-				<div className="flex items-center gap-3">
-					<h3 className="font-display text-sm font-semibold uppercase tracking-wider">
-						Findings
-					</h3>
-					<span className="text-xs text-muted-foreground tabular-nums">
-						{filteredData.length} / {data?.findings.length ?? 0}
+			<div className="flex items-baseline justify-between mb-2">
+				<div className="flex items-baseline gap-3">
+					<h3 className="font-display text-lg font-semibold">Findings</h3>
+					<span className="text-xs text-muted-foreground tabular-nums font-mono">
+						{filteredData.length}/{data?.findings.length ?? 0}
 					</span>
 				</div>
 
-				{/* Filter dropdown */}
 				<DropdownMenu
 					trigger={
-						<Button variant="outline" size="sm" className="gap-2">
+						<Button variant="outline" size="sm" className="gap-1.5">
 							<Filter className="h-3 w-3" />
 							Filter
 							{statusFilter.size > 0 && statusFilter.size < 4 && (
-								<span className="ml-1 flex h-4 w-4 items-center justify-center bg-primary text-primary-foreground text-[10px]">
+								<span className="ml-0.5 text-[10px] bg-foreground text-background px-1 py-px">
 									{statusFilter.size}
 								</span>
 							)}
-							<ChevronDown className="h-3 w-3 opacity-50" />
+							<ChevronDown className="h-3 w-3 opacity-40" />
 						</Button>
 					}
 					align="end"
@@ -363,7 +348,7 @@ export function FindingsTable({ gameId }: FindingsTableProps) {
 							onCheckedChange={() => toggleStatus(status)}
 						>
 							<span className="flex-1">{STATUS_CONFIG[status].label}</span>
-							<span className="text-muted-foreground tabular-nums ml-2">
+							<span className="text-muted-foreground tabular-nums ml-2 font-mono">
 								{statusCounts[status]}
 							</span>
 						</DropdownMenuCheckboxItem>
@@ -386,10 +371,12 @@ export function FindingsTable({ gameId }: FindingsTableProps) {
 				</DropdownMenu>
 			</div>
 
+			<div className="editorial-rule-thick" />
+
 			{/* Table */}
 			{filteredData.length === 0 ? (
-				<div className="px-4 py-8 text-center text-sm text-muted-foreground">
-					No findings match the current filter.
+				<div className="py-8 text-center text-sm text-muted-foreground italic">
+					No findings match the current filter
 				</div>
 			) : (
 				<div className="max-h-[400px] overflow-auto">
@@ -398,7 +385,7 @@ export function FindingsTable({ gameId }: FindingsTableProps) {
 							{table.getHeaderGroups().map((headerGroup) => (
 								<TableRow
 									key={headerGroup.id}
-									className="border-b border-border hover:bg-transparent"
+									className="border-b-2 border-foreground/10 hover:bg-transparent"
 								>
 									{headerGroup.headers.map((header) => (
 										<TableHead key={header.id}>
@@ -417,7 +404,7 @@ export function FindingsTable({ gameId }: FindingsTableProps) {
 							{table.getRowModel().rows.map((row) => (
 								<TableRow
 									key={row.id}
-									className="cursor-pointer hover:bg-secondary/80"
+									className="cursor-pointer hover:bg-secondary/60"
 									onClick={() =>
 										router.push(`/game/${gameId}/finding/${row.original.id}`)
 									}

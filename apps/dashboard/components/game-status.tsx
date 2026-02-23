@@ -2,14 +2,7 @@
 
 import { useInterval } from "ahooks";
 import { motion } from "framer-motion";
-import {
-	Clock,
-	MessageSquare,
-	Search,
-	Target,
-	Trophy,
-	Zap,
-} from "lucide-react";
+import { Trophy } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { GameState, GameStats, Phase } from "@/lib/types";
 import { PHASE_CONFIG } from "@/lib/types";
@@ -39,7 +32,6 @@ function formatDuration(seconds: number): string {
 }
 
 function PhaseIndicator({ phase }: { phase: Phase }) {
-	// Show only the active gameplay phases, not setup/complete
 	const displayPhases: Phase[] = [
 		"hunt",
 		"hunt_scoring",
@@ -47,7 +39,6 @@ function PhaseIndicator({ phase }: { phase: Phase }) {
 		"review_scoring",
 	];
 
-	// For setup phase, nothing is active yet; for complete, everything is past
 	const currentIndex =
 		phase === "setup"
 			? -1
@@ -56,7 +47,7 @@ function PhaseIndicator({ phase }: { phase: Phase }) {
 				: displayPhases.indexOf(phase);
 
 	return (
-		<div className="flex items-center gap-1">
+		<div className="flex items-center gap-0.5">
 			{displayPhases.map((p, i) => {
 				const isActive = p === phase;
 				const isPast = currentIndex > i;
@@ -66,25 +57,20 @@ function PhaseIndicator({ phase }: { phase: Phase }) {
 					<div key={p} className="flex items-center">
 						<div
 							className={cn(
-								"relative px-2 py-1 text-[10px] font-semibold uppercase tracking-wider transition-all",
-								isActive && "text-background",
-								isPast && "text-muted-foreground",
-								!isActive && !isPast && "text-muted-foreground/40",
+								"relative px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider border transition-all",
+								isActive && "bg-foreground text-background border-foreground",
+								isPast && "text-muted-foreground border-border bg-transparent",
+								!isActive &&
+									!isPast &&
+									"text-muted-foreground/30 border-transparent bg-transparent",
 							)}
-							style={{
-								backgroundColor: isActive
-									? `var(--color-${p.replace("_", "-")})`
-									: "transparent",
-							}}
 						>
 							{isActive && (
 								<motion.div
-									className="absolute inset-0"
-									style={{
-										backgroundColor: `var(--color-${p.replace("_", "-")})`,
-									}}
-									animate={{ opacity: [0.7, 1, 0.7] }}
-									transition={{ duration: 1.5, repeat: Infinity }}
+									className="absolute left-0 bottom-0 h-0.5 bg-primary"
+									initial={{ width: 0 }}
+									animate={{ width: "100%" }}
+									transition={{ duration: 0.4, ease: "easeOut" }}
 								/>
 							)}
 							<span className="relative z-10">{phaseConfig.label}</span>
@@ -92,8 +78,8 @@ function PhaseIndicator({ phase }: { phase: Phase }) {
 						{i < displayPhases.length - 1 && (
 							<div
 								className={cn(
-									"w-3 h-[2px]",
-									isPast ? "bg-muted-foreground" : "bg-border",
+									"w-4 h-px",
+									isPast ? "bg-foreground/30" : "bg-border",
 								)}
 							/>
 						)}
@@ -162,9 +148,7 @@ function Timer({
 	);
 
 	if (!endTime) {
-		return (
-			<span className="text-muted-foreground text-sm font-mono">--:--</span>
-		);
+		return <span className="text-muted-foreground text-sm font-mono">—</span>;
 	}
 
 	const progress = duration > 0 ? (remaining / duration) * 100 : 0;
@@ -173,36 +157,29 @@ function Timer({
 
 	return (
 		<div className="flex items-center gap-3">
-			<div className="relative w-24 h-1.5 bg-secondary overflow-hidden">
+			<div className="relative w-20 h-1 bg-border overflow-hidden">
 				<motion.div
 					className={cn(
 						"absolute inset-y-0 left-0 transition-colors",
 						isCritical
-							? "bg-invalid"
+							? "bg-destructive"
 							: isUrgent
 								? "bg-duplicate"
-								: "bg-primary",
+								: "bg-foreground",
 					)}
 					initial={false}
 					animate={{ width: `${progress}%` }}
 					transition={{ duration: 0.3 }}
 				/>
-				{isUrgent && (
-					<motion.div
-						className="absolute inset-0 bg-invalid/50"
-						animate={{ opacity: [0, 0.5, 0] }}
-						transition={{ duration: 0.5, repeat: Infinity }}
-					/>
-				)}
 			</div>
 			<motion.span
 				className={cn(
-					"font-mono text-lg tabular-nums font-semibold",
-					isCritical && "text-invalid text-glow-sm",
+					"font-mono text-xl tabular-nums font-bold tracking-tight",
+					isCritical && "text-destructive",
 					isUrgent && !isCritical && "text-duplicate",
 				)}
-				animate={isCritical ? { scale: [1, 1.05, 1] } : {}}
-				transition={{ duration: 0.5, repeat: isCritical ? Infinity : 0 }}
+				animate={isCritical ? { opacity: [1, 0.5, 1] } : {}}
+				transition={{ duration: 0.8, repeat: isCritical ? Infinity : 0 }}
 			>
 				{formatTime(remaining)}
 			</motion.span>
@@ -210,34 +187,26 @@ function Timer({
 	);
 }
 
-function StatBlock({
-	icon: Icon,
+function Stat({
 	label,
 	value,
 	pending,
 	highlight,
 }: {
-	icon: typeof Target;
 	label: string;
 	value: string | number;
 	pending?: number;
 	highlight?: boolean;
 }) {
 	return (
-		<div className="flex items-center gap-2">
-			<Icon
-				className={cn(
-					"h-3.5 w-3.5",
-					highlight ? "text-hunt" : "text-muted-foreground",
-				)}
-			/>
-			<span className="text-[11px] text-muted-foreground uppercase tracking-wider">
+		<div className="flex items-baseline gap-1.5">
+			<span className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">
 				{label}
 			</span>
 			<span
 				className={cn(
 					"font-mono text-sm font-semibold tabular-nums",
-					highlight && "text-hunt",
+					highlight && "text-accent",
 				)}
 			>
 				{value}
@@ -256,25 +225,25 @@ export function GameStatus({ game, stats }: GameStatusProps) {
 		game.phase === "hunt" ? game.huntDuration : game.reviewDuration;
 
 	return (
-		<div className="border border-border bg-card">
-			{/* Top section - Phase and Timer */}
-			<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-4 py-3 border-b border-border">
-				<div className="flex items-center gap-4">
-					{/* Round indicator */}
-					<div className="flex items-center gap-2">
-						<span className="text-[10px] text-muted-foreground uppercase tracking-wider">
+		<div>
+			{/* Top: Round + Phase + Timer */}
+			<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4">
+				<div className="flex items-center gap-5">
+					{/* Round */}
+					<div>
+						<span className="text-[10px] text-muted-foreground uppercase tracking-wider block mb-0.5">
 							Round
 						</span>
-						<span className="font-display text-2xl font-bold text-primary tabular-nums">
+						<span className="font-display text-4xl font-bold tabular-nums leading-none">
 							{game.round}
 						</span>
 					</div>
 
-					<div className="w-px h-6 bg-border" />
+					<div className="w-px h-10 bg-border" />
 
 					{/* Phase */}
-					<div className="flex flex-col gap-1">
-						<span className="text-[10px] text-muted-foreground">
+					<div>
+						<span className="text-xs text-muted-foreground block mb-1.5">
 							{config.description}
 						</span>
 						<PhaseIndicator phase={game.phase} />
@@ -282,12 +251,10 @@ export function GameStatus({ game, stats }: GameStatusProps) {
 				</div>
 
 				{/* Timers */}
-				<div className="flex items-center gap-4">
-					{/* Total elapsed time */}
-					<div className="flex items-center gap-1.5">
-						<Zap className="h-3 w-3 text-muted-foreground" />
+				<div className="flex items-center gap-5">
+					<div className="flex items-baseline gap-1.5">
 						<span className="text-[10px] text-muted-foreground uppercase tracking-wider">
-							Total
+							Elapsed
 						</span>
 						<TotalTimer
 							createdAt={game.createdAt}
@@ -295,44 +262,37 @@ export function GameStatus({ game, stats }: GameStatusProps) {
 						/>
 					</div>
 
-					<div className="w-px h-4 bg-border" />
+					<div className="w-px h-5 bg-border" />
 
-					{/* Phase countdown */}
-					<div className="flex items-center gap-2">
-						<Clock className="h-3.5 w-3.5 text-muted-foreground" />
-						{isTimedPhase ? (
-							<Timer endTime={game.phaseEndsAt} duration={duration} />
-						) : (
-							<span className="text-sm text-muted-foreground font-mono">
-								{game.isComplete ? "Complete" : "Waiting..."}
-							</span>
-						)}
-					</div>
+					{isTimedPhase ? (
+						<Timer endTime={game.phaseEndsAt} duration={duration} />
+					) : (
+						<span className="text-sm text-muted-foreground font-mono">
+							{game.isComplete ? "Final" : "Waiting…"}
+						</span>
+					)}
 				</div>
 			</div>
 
-			{/* Bottom section - Stats */}
-			<div className="flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-2.5">
-				<StatBlock icon={Target} label="Target" value={game.targetScore} />
-				<StatBlock
-					icon={Search}
+			<div className="editorial-rule" />
+
+			{/* Bottom: Stats row */}
+			<div className="flex flex-wrap items-center gap-x-6 gap-y-2 pt-3">
+				<Stat label="Target" value={game.targetScore} />
+				<Stat
 					label="Findings"
 					value={`${stats.validFindings}/${stats.totalFindings}`}
 					pending={stats.pendingFindings}
 				/>
-				<StatBlock
-					icon={MessageSquare}
+				<Stat
 					label="Disputes"
 					value={stats.totalDisputes}
 					pending={stats.pendingDisputes}
 				/>
 				{game.winner && (
-					<div className="flex items-center gap-2 ml-auto">
-						<Trophy className="h-4 w-4 text-hunt" />
-						<span className="text-xs text-hunt font-semibold uppercase tracking-wider">
-							Winner
-						</span>
-						<span className="font-mono text-sm text-hunt">
+					<div className="flex items-center gap-1.5 ml-auto">
+						<Trophy className="h-4 w-4 text-accent" />
+						<span className="font-display text-sm font-semibold text-accent">
 							{game.winner.split("-").pop()}
 						</span>
 					</div>

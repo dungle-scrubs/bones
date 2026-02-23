@@ -34,7 +34,7 @@ export function DropdownMenu({
 			{open && (
 				<div
 					className={cn(
-						"absolute z-50 mt-1 min-w-[180px] overflow-hidden border border-border bg-popover p-1 shadow-lg shadow-black/20",
+						"absolute z-50 mt-1 min-w-[180px] overflow-hidden border border-border bg-card p-1 shadow-md shadow-foreground/5",
 						align === "start" && "left-0",
 						align === "end" && "right-0",
 						align === "center" && "left-1/2 -translate-x-1/2",
@@ -64,16 +64,16 @@ export function DropdownMenuItem({
 		<button
 			type="button"
 			className={cn(
-				"relative flex w-full cursor-pointer select-none items-center gap-2 px-2 py-1.5 text-xs outline-none transition-colors",
+				"relative flex w-full select-none items-center gap-2 px-2 py-1.5 text-xs outline-none transition-colors",
 				"hover:bg-secondary focus:bg-secondary",
-				disabled && "pointer-events-none opacity-50",
+				disabled && "pointer-events-none opacity-40",
 			)}
 			onClick={onClick}
 			disabled={disabled}
 		>
 			{checked !== undefined && (
 				<div className="h-3.5 w-3.5 flex items-center justify-center">
-					{checked && <Check className="h-3 w-3 text-primary" />}
+					{checked && <Check className="h-3 w-3 text-foreground" />}
 				</div>
 			)}
 			{children}
@@ -94,18 +94,20 @@ export function DropdownMenuCheckboxItem({
 		<button
 			type="button"
 			className={cn(
-				"relative flex w-full cursor-pointer select-none items-center gap-2 px-2 py-1.5 text-xs outline-none transition-colors",
+				"relative flex w-full select-none items-center gap-2 px-2 py-1.5 text-xs outline-none transition-colors",
 				"hover:bg-secondary focus:bg-secondary",
 			)}
 			onClick={() => onCheckedChange(!checked)}
 		>
 			<div
 				className={cn(
-					"h-3.5 w-3.5 border flex items-center justify-center transition-colors",
-					checked ? "bg-primary border-primary" : "bg-input border-border",
+					"h-3.5 w-3.5 border-1.5 flex items-center justify-center transition-colors",
+					checked
+						? "bg-foreground border-foreground"
+						: "bg-transparent border-foreground/30",
 				)}
 			>
-				{checked && <Check className="h-2.5 w-2.5 text-primary-foreground" />}
+				{checked && <Check className="h-2.5 w-2.5 text-background" />}
 			</div>
 			{children}
 		</button>

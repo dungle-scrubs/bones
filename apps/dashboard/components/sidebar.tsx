@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { CheckCircle, Clock, Gamepad2, Menu, Play, X } from "lucide-react";
+import { CheckCircle, Clock, Menu, Play, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -38,11 +38,8 @@ export function Sidebar() {
 	});
 
 	const games = data?.games ?? [];
-
-	// Extract current game ID from URL if on a game page
 	const currentGameId = pathname?.match(/^\/game\/([^/]+)/)?.[1] ?? null;
 
-	// Close on route change
 	useEffect(() => {
 		setOpen(false);
 	}, []);
@@ -53,27 +50,27 @@ export function Sidebar() {
 		const hours = Math.floor(diff / 3600000);
 		const days = Math.floor(diff / 86400000);
 
-		if (days > 0) return `${days}d ago`;
-		if (hours > 0) return `${hours}h ago`;
-		if (mins > 0) return `${mins}m ago`;
-		return "just now";
+		if (days > 0) return `${days}d`;
+		if (hours > 0) return `${hours}h`;
+		if (mins > 0) return `${mins}m`;
+		return "now";
 	};
 
 	const getStatusIcon = (phase: string, isComplete: boolean) => {
 		if (isComplete)
 			return <CheckCircle className="h-3 w-3 text-muted-foreground" />;
 		if (phase === "hunt" || phase === "review")
-			return <Play className="h-3 w-3 text-green-400" />;
-		return <Clock className="h-3 w-3 text-yellow-400" />;
+			return <Play className="h-3 w-3 text-valid" />;
+		return <Clock className="h-3 w-3 text-duplicate" />;
 	};
 
 	return (
 		<>
-			{/* Hamburger button */}
+			{/* Hamburger */}
 			<button
 				type="button"
 				onClick={() => setOpen(true)}
-				className="fixed top-3 left-3 z-50 p-2 border border-border bg-card hover:bg-secondary hover:border-primary cursor-pointer transition-colors"
+				className="fixed top-3.5 left-3 z-50 p-1.5 hover:bg-secondary transition-colors"
 				aria-label="Open menu"
 			>
 				<Menu className="h-5 w-5" />
@@ -82,71 +79,86 @@ export function Sidebar() {
 			{/* Backdrop */}
 			{open && (
 				<div
-					className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
+					className="fixed inset-0 z-50 bg-foreground/10 backdrop-blur-sm"
 					onClick={() => setOpen(false)}
 				/>
 			)}
 
-			{/* Sidebar panel */}
+			{/* Panel */}
 			<div
 				className={cn(
-					"fixed top-0 left-0 z-50 h-full w-80 border-r border-border bg-card transform transition-transform duration-200 ease-out",
+					"fixed top-0 left-0 z-50 h-full w-72 border-r border-border bg-background transform transition-transform duration-200 ease-out shadow-lg shadow-foreground/5",
 					open ? "translate-x-0" : "-translate-x-full",
 				)}
 			>
 				{/* Header */}
-				<div className="flex items-center justify-between px-4 py-3 border-b border-border">
-					<div className="flex items-center gap-2">
-						<Gamepad2 className="h-5 w-5 text-primary" />
-						<span className="font-display text-sm font-semibold uppercase tracking-wider">
-							Bones
-						</span>
-					</div>
+				<div className="flex items-center justify-between px-4 py-3.5 border-b border-foreground">
+					<Link
+						href="/"
+						className="font-display text-lg font-bold tracking-tight"
+						onClick={() => setOpen(false)}
+					>
+						Bones
+					</Link>
 					<button
 						type="button"
 						onClick={() => setOpen(false)}
-						className="p-1 hover:bg-secondary hover:text-primary cursor-pointer transition-colors"
+						className="p-1 hover:bg-secondary transition-colors"
 						aria-label="Close menu"
 					>
-						<X className="h-5 w-5" />
+						<X className="h-4 w-4" />
 					</button>
 				</div>
 
-				{/* Content */}
+				{/* Games list */}
 				<div className="p-4 space-y-4">
-					<div className="flex items-center gap-2 text-[10px] text-muted-foreground uppercase tracking-wider">
-						<Clock className="h-3 w-3" />
-						Recent Games
-					</div>
+					<span className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">
+						Games
+					</span>
 
 					{games.length === 0 ? (
-						<div className="text-sm text-muted-foreground py-4">
-							No games yet. Start one with the CLI.
-						</div>
+						<p className="text-sm text-muted-foreground py-4 italic">
+							No games yet
+						</p>
 					) : (
-						<div className="space-y-1">
+						<div className="space-y-0.5">
 							{games.map((game) => {
 								const isActive = currentGameId === game.id;
 								return (
 									<Link
 										key={game.id}
 										href={`/game/${game.id}`}
+										onClick={() => setOpen(false)}
 										className={cn(
-											"group flex items-center gap-3 px-3 py-2 text-sm cursor-pointer transition-colors",
+											"group flex items-center gap-2.5 px-2.5 py-2 text-sm transition-colors",
 											isActive
-												? "bg-primary/10 text-primary border border-primary/30"
-												: "hover:bg-secondary hover:border-border border border-transparent",
+												? "bg-foreground text-background"
+												: "hover:bg-secondary",
 										)}
 									>
-										{getStatusIcon(game.phase, game.isComplete)}
+										<span className={isActive ? "text-background/60" : ""}>
+											{getStatusIcon(game.phase, game.isComplete)}
+										</span>
 										<div className="min-w-0 flex-1">
-											<div className="font-mono text-xs truncate">
+											<div
+												className={cn(
+													"font-mono text-xs truncate",
+													isActive ? "text-background" : "text-foreground",
+												)}
+											>
 												{game.id}
 											</div>
-											<div className="text-[10px] text-muted-foreground">
-												{formatTime(game.createdAt)}
-											</div>
 										</div>
+										<span
+											className={cn(
+												"text-[10px] tabular-nums font-mono",
+												isActive
+													? "text-background/50"
+													: "text-muted-foreground",
+											)}
+										>
+											{formatTime(game.createdAt)}
+										</span>
 									</Link>
 								);
 							})}
@@ -154,9 +166,9 @@ export function Sidebar() {
 					)}
 
 					<div className="pt-4 border-t border-border">
-						<Link href="/">
+						<Link href="/" onClick={() => setOpen(false)}>
 							<Button variant="outline" size="sm" className="w-full">
-								Enter New Game ID
+								Enter Game ID
 							</Button>
 						</Link>
 					</div>
