@@ -1,5 +1,5 @@
 {
-	"name": "bug-hunt-scripts",
+	"name": "@dungle-scrubs/bug-hunt-scripts",
 	"version": "1.0.0",
 	"type": "module",
 	"description": "Game state management for bug-hunt skill",

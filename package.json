@@ -1,5 +1,5 @@
 {
-	"name": "bones",
+	"name": "@dungle-scrubs/bones",
 	"version": "2.0.0",
 	"type": "module",
 	"description": "Competitive multi-agent code review game — LLM agents hunt for bugs, security issues, doc drift, and more",
