@@ -122,6 +122,9 @@ Options:
   --thinking <level>            Agent thinking level (default: medium)
   --include <paths...>          Only search these directories
   --exclude <paths...>          Additional directories to exclude
+  --on-complete <command>       Shell command to run on completion (gets BONES_* env vars)
+  --notify <sink>               Built-in notification: stdout | file:<path>
+  --output <mode>               Output mode: tui (default) | json
 ```
 
 ### Inspect results
@@ -133,6 +136,43 @@ bones disputes <game_id>    # All disputes with resolutions
 bones export <game_id>      # Export to ~/.bones/logs/
 bones ui <game_id>          # Interactive terminal UI
 ```
+
+### Run history & diffing
+
+```bash
+bones history ./my-project              # List past games for a project
+bones history ./my-project -n 5         # Last 5 games
+bones diff <game_id_1> <game_id_2>      # Compare findings across two runs
+```
+
+### Scheduled / headless mode
+
+Games auto-export results and write `summary.json` on completion (or crash).
+Exit codes: `0` = completed with findings, `1` = error, `2` = no findings.
+
+```bash
+# Run headless with NDJSON output and notifications
+bones play ./my-project --output json --notify file:~/bones-results.log
+
+# Run with a shell hook on completion
+bones play ./my-project --output json \
+  --on-complete "slack-notify.sh"
+```
+
+The `--on-complete` command receives game summary as environment variables:
+`BONES_GAME_ID`, `BONES_WINNER`, `BONES_FINDINGS_COUNT`, `BONES_VALID_FINDINGS`,
+`BONES_COST`, `BONES_TOKENS`, `BONES_PROJECT`, `BONES_CATEGORY`, `BONES_ROUNDS`.
+
+### Generate a schedule
+
+```bash
+bones schedule ./my-project                     # nightly preset (launchd/cron)
+bones schedule ./my-project --preset weekly     # weekly full run
+```
+
+The `nightly` preset rotates categories: Mon/Wed = bugs, Tue/Thu = doc_drift,
+Fri = security. Generates wrapper scripts with log rotation (30 days) and
+platform-specific scheduling (launchd on macOS, cron on Linux).
 
 ### Web dashboard
 
@@ -188,7 +228,14 @@ src/
 ├── cli/commands.ts           # Command handlers
 ├── domain/                   # Game, Finding, Dispute, Agent models
 ├── repository/               # SQLite persistence
-├── services/                 # Orchestrator, GameRunner, Scorer
+├── services/
+│   ├── Orchestrator.ts       # Central facade for all game operations
+│   ├── GameRunner.ts         # Autonomous game loop with retry + auto-export
+│   ├── Scorer.ts             # Point calculations in transactions
+│   ├── Exporter.ts           # Game result export (markdown + JSON)
+│   ├── RetryPolicy.ts        # Exponential backoff for API resilience
+│   ├── NotificationHook.ts   # Completion hooks (shell commands, file, stdout)
+│   └── Scheduler.ts          # launchd/cron schedule generation
 └── agents/                   # Agent factory, runner, and tools
 apps/
 └── dashboard/                # Next.js web UI
