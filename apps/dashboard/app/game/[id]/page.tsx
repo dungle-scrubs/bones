@@ -1,8 +1,8 @@
 "use client";
 
-import { AlertCircle, ArrowLeft, RefreshCw } from "lucide-react";
+import { ArrowLeft, Check, Copy, RefreshCw } from "lucide-react";
 import Link from "next/link";
-import { use, useEffect } from "react";
+import { use, useCallback, useEffect, useState } from "react";
 import { FindingsTable } from "@/components/findings-table";
 import { GameStatus } from "@/components/game-status";
 import { Leaderboard } from "@/components/leaderboard";
@@ -18,8 +18,14 @@ export default function GamePage({
 	const { id: gameId } = use(params);
 	const { data, isLoading, isError, error, refetch, isFetching } =
 		useGame(gameId);
+	const [copied, setCopied] = useState(false);
 
-	// Track game visit when data loads
+	const copyGameId = useCallback(() => {
+		navigator.clipboard.writeText(gameId);
+		setCopied(true);
+		setTimeout(() => setCopied(false), 1500);
+	}, [gameId]);
+
 	useEffect(() => {
 		if (data) {
 			addRecentGame(gameId);
@@ -29,21 +35,7 @@ export default function GamePage({
 	if (isLoading) {
 		return (
 			<main className="min-h-screen flex items-center justify-center">
-				<div className="flex flex-col items-center gap-4">
-					<div className="relative">
-						<div className="h-12 w-12 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-						<div
-							className="absolute inset-2 h-8 w-8 border-2 border-muted-foreground/30 border-t-transparent rounded-full animate-spin"
-							style={{
-								animationDirection: "reverse",
-								animationDuration: "1.5s",
-							}}
-						/>
-					</div>
-					<span className="text-sm text-muted-foreground font-mono">
-						Loading game data...
-					</span>
-				</div>
+				<p className="text-sm text-muted-foreground">Loading game…</p>
 			</main>
 		);
 	}
@@ -52,13 +44,8 @@ export default function GamePage({
 		return (
 			<main className="min-h-screen flex items-center justify-center p-6">
 				<div className="text-center space-y-4 max-w-md">
-					<div className="flex items-center justify-center gap-2 text-invalid">
-						<AlertCircle className="h-5 w-5" />
-						<span className="font-display text-lg font-semibold uppercase tracking-wider">
-							Connection Failed
-						</span>
-					</div>
-					<p className="text-sm text-muted-foreground font-mono">
+					<h1 className="font-display text-xl font-bold">Connection Failed</h1>
+					<p className="text-sm text-muted-foreground">
 						{error instanceof Error ? error.message : "Unknown error"}
 					</p>
 					<div className="flex items-center justify-center gap-3 pt-2">
@@ -78,29 +65,41 @@ export default function GamePage({
 		);
 	}
 
-	if (!data) {
-		return null;
-	}
+	if (!data) return null;
 
 	return (
 		<main className="min-h-screen">
 			{/* Header */}
-			<header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-				<div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 pl-14">
+			<header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+				<div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 pl-14">
 					<div className="flex items-center justify-between">
-						<div className="flex items-center gap-4">
-							<h1 className="font-display text-sm font-bold uppercase tracking-wider">
-								Game
-								<span className="font-mono text-xs text-muted-foreground ml-2 normal-case tracking-normal">
-									{gameId.slice(0, 8)}...
-								</span>
-							</h1>
+						<div className="flex items-center gap-3">
+							<Link
+								href="/"
+								className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+							>
+								<ArrowLeft className="h-3 w-3" />
+							</Link>
+							<h1 className="font-display text-sm font-semibold">Game</h1>
+							<span className="font-mono text-xs text-muted-foreground">
+								{gameId}
+							</span>
+							<button
+								type="button"
+								onClick={copyGameId}
+								className="p-0.5 text-muted-foreground hover:text-foreground transition-colors"
+								title="Copy game ID"
+							>
+								{copied ? (
+									<Check className="h-3 w-3 text-valid" />
+								) : (
+									<Copy className="h-3 w-3" />
+								)}
+							</button>
 						</div>
-						<div className="flex items-center gap-3 text-[10px] text-muted-foreground">
-							{isFetching && (
-								<RefreshCw className="h-3 w-3 animate-spin text-primary" />
-							)}
-							<span className="font-mono">
+						<div className="flex items-center gap-2 text-xs text-muted-foreground">
+							{isFetching && <RefreshCw className="h-3 w-3 animate-spin" />}
+							<span className="font-mono tabular-nums">
 								{new Date(data.timestamp).toLocaleTimeString()}
 							</span>
 						</div>
@@ -108,19 +107,16 @@ export default function GamePage({
 				</div>
 			</header>
 
-			{/* Main content */}
-			<div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-				{/* Game status bar */}
+			{/* Content */}
+			<div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-10">
 				<GameStatus game={data.game} stats={data.stats} />
 
-				{/* Leaderboard */}
 				<Leaderboard
 					scoreboard={data.scoreboard}
 					phase={data.game.phase}
 					targetScore={data.game.targetScore}
 				/>
 
-				{/* Findings table */}
 				<FindingsTable gameId={gameId} />
 			</div>
 		</main>

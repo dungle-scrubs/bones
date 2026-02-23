@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, ArrowLeft, RefreshCw } from "lucide-react";
+import { ArrowLeft, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -19,13 +19,8 @@ export default function GameError({
 	return (
 		<main className="min-h-screen flex items-center justify-center p-6">
 			<div className="text-center space-y-4 max-w-md">
-				<div className="flex items-center justify-center gap-2 text-invalid">
-					<AlertCircle className="h-5 w-5" />
-					<span className="font-display text-lg font-semibold uppercase tracking-wider">
-						Failed to load game
-					</span>
-				</div>
-				<p className="text-sm text-muted-foreground font-mono">
+				<h1 className="font-display text-xl font-bold">Failed to load game</h1>
+				<p className="text-sm text-muted-foreground">
 					{error.message || "Could not load game data"}
 				</p>
 				<div className="flex items-center justify-center gap-3 pt-2">
@@ -36,7 +31,7 @@ export default function GameError({
 					<Link href="/">
 						<Button variant="ghost" size="sm">
 							<ArrowLeft className="h-3 w-3 mr-2" />
-							Back to games
+							Back
 						</Button>
 					</Link>
 				</div>

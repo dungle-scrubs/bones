@@ -4,7 +4,7 @@
  * Bones CLI — competitive multi-agent code review game.
  *
  * Usage:
- *   bones play <path> [options]     Run an autonomous game
+ *   bones play [options]             Run an autonomous game (cwd by default)
  *   bones setup <url> [options]     Create a game for manual orchestration
  *   bones status <game_id>          Show game state + scoreboard
  */
@@ -79,7 +79,7 @@ program
 program
 	.command("play")
 	.description("Run a fully autonomous game with LLM agents")
-	.argument("<project_path>", "Path to the project to review")
+	.option("--path <dir>", "Path to the project to review", ".")
 	.option(
 		"--model <provider/model>",
 		"Agent model",
@@ -106,15 +106,21 @@ program
 	)
 	.option("--exclude <paths...>", "Additional directories to exclude")
 	.option("--auth <method>", "Auth method: oauth")
+	.option("-w, --web", "Start API server and dashboard")
+	.option(
+		"--on-complete <command>",
+		"Shell command to run on game completion (receives BONES_* env vars)",
+	)
+	.option("--notify <sink>", "Built-in notification: stdout | file:<path>")
 	.addOption(
 		new Option("--output <mode>", "Output mode")
 			.choices(["tui", "json"])
 			.default("tui"),
 	)
-	.action(async (projectPath: string, opts) => {
+	.action(async (opts) => {
 		const { commands, close } = createContext();
 		try {
-			const result = await commands.play(projectPath, opts);
+			const result = await commands.play(opts.path, opts);
 			if (result) console.log(result);
 		} catch (error) {
 			console.error(JSON.stringify({ error: (error as Error).message }));
@@ -367,6 +373,46 @@ program
 	.description("Export findings to logs folder")
 	.argument("<game_id>")
 	.action((gameId: string) => action((c) => c.export(gameId))());
+
+// ─── History & Diff ──────────────────────────────────────────────────
+
+program
+	.command("history")
+	.description("List recent games for a project")
+	.argument("[project]", "Project path (default: cwd)", ".")
+	.option("-n, --limit <count>", "Maximum results", "20")
+	.action((project: string, opts: { limit: string }) =>
+		action((c) => c.history(project, parseInt(opts.limit, 10)))(),
+	);
+
+program
+	.command("diff")
+	.description("Compare findings between two game runs")
+	.argument("<game_id_1>", "First (older) game ID")
+	.argument("<game_id_2>", "Second (newer) game ID")
+	.action((gameId1: string, gameId2: string) =>
+		action((c) => c.diff(gameId1, gameId2))(),
+	);
+
+// ─── Scheduling ──────────────────────────────────────────────────────
+
+program
+	.command("schedule")
+	.description(
+		"Generate scheduling config for unattended runs (launchd on macOS, cron on Linux)",
+	)
+	.argument("[project]", "Project path (default: cwd)", ".")
+	.addOption(
+		new Option("--preset <name>", "Schedule preset")
+			.choices(["nightly", "weekly"])
+			.default("nightly"),
+	)
+	.option("-a, --agents <count>", "Number of agents", "2")
+	.option("-t, --target <score>", "Target score", "5")
+	.option("-m, --max-rounds <n>", "Max rounds", "2")
+	.action((project: string, opts) =>
+		action((c) => c.schedule(project, opts))(),
+	);
 
 // ─── UI ──────────────────────────────────────────────────────────────────────
 

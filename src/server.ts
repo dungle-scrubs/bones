@@ -28,9 +28,19 @@ const app = new Hono();
 
 app.use("*", cors());
 
-/** Lists all games with summary info (id, phase, winner, etc). */
+/**
+ * Lists all games with summary info. Supports optional project filter.
+ * Query params:
+ *   ?project=<path> — filter by project URL/path
+ *   ?limit=<n> — max results (default: 50)
+ */
 app.get("/api/games", (c) => {
-	const games = orchestrator.getAllGames();
+	const project = c.req.query("project");
+	const limit = parseInt(c.req.query("limit") ?? "50", 10);
+
+	const games = project
+		? orchestrator.getHistory(project, limit)
+		: orchestrator.getAllGames();
 
 	return c.json({
 		games: games.map((g) => ({
@@ -243,6 +253,61 @@ app.get("/api/games/:id/events", async (c) => {
 	);
 });
 
+/**
+ * Compares findings between two game runs.
+ * Query params: ?game1=<id>&game2=<id>
+ */
+app.get("/api/diff", (c) => {
+	const gameId1 = c.req.query("game1");
+	const gameId2 = c.req.query("game2");
+
+	if (!gameId1 || !gameId2) {
+		return c.json(
+			{ error: "Both game1 and game2 query params are required" },
+			400,
+		);
+	}
+
+	try {
+		const result = orchestrator.diffGames(gameId1, gameId2);
+		return c.json({
+			summary: result.summary,
+			game1: {
+				id: result.game1.id,
+				category: result.game1.category,
+				createdAt: result.game1.createdAt.toISOString(),
+			},
+			game2: {
+				id: result.game2.id,
+				category: result.game2.category,
+				createdAt: result.game2.createdAt.toISOString(),
+			},
+			newIssues: result.newIssues.map((f) => ({
+				id: f.id,
+				file: f.filePath,
+				lines: `${f.lineStart}-${f.lineEnd}`,
+				description: f.description,
+			})),
+			resolvedIssues: result.resolvedIssues.map((f) => ({
+				id: f.id,
+				file: f.filePath,
+				lines: `${f.lineStart}-${f.lineEnd}`,
+				description: f.description,
+			})),
+			recurringIssues: result.recurringIssues.map((r) => ({
+				file: r.game1Finding.filePath,
+				game1Lines: `${r.game1Finding.lineStart}-${r.game1Finding.lineEnd}`,
+				game2Lines: `${r.game2Finding.lineStart}-${r.game2Finding.lineEnd}`,
+				description: r.game2Finding.description,
+			})),
+			timestamp: new Date().toISOString(),
+		});
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		return c.json({ error: message }, 404);
+	}
+});
+
 /** Simple health check for monitoring/load balancers. */
 app.get("/health", (c) => c.json({ status: "ok" }));
 
@@ -251,9 +316,12 @@ const port = parseInt(process.env.BONES_PORT ?? "8019", 10);
 console.log(`Bones API server starting on http://localhost:${port}`);
 console.log(`  Database: ${dbPath}`);
 console.log(`  Endpoints:`);
+console.log(`    GET /api/games              - List games (?project=<path>)`);
 console.log(`    GET /api/games/:id          - Game state + scoreboard`);
 console.log(`    GET /api/games/:id/findings - All findings`);
 console.log(`    GET /api/games/:id/disputes - All disputes`);
+console.log(`    GET /api/games/:id/events   - SSE live updates`);
+console.log(`    GET /api/diff?game1=&game2= - Compare two runs`);
 console.log(`    GET /health                 - Health check`);
 
 /** Closes database connection on process exit. */

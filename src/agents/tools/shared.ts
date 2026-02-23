@@ -191,11 +191,11 @@ export function createReadFileTool(
 				output = slice.map((line, i) => `${start + i}: ${line}`).join("\n");
 				lineCount = slice.length;
 			} else {
-				// Cap at 500 lines to avoid blowing up context
-				const capped = lines.slice(0, 500);
+				// Cap at 200 lines to keep context budget manageable across models
+				const capped = lines.slice(0, 200);
 				output = capped.map((line, i) => `${i + 1}: ${line}`).join("\n");
-				if (lines.length > 500) {
-					output += `\n... (${lines.length - 500} more lines truncated)`;
+				if (lines.length > 200) {
+					output += `\n... (${lines.length - 200} more lines — use start_line/end_line to read further)`;
 				}
 				lineCount = capped.length;
 			}

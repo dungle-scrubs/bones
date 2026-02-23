@@ -47,6 +47,10 @@ export interface PlayOpts extends SetupOpts {
 	exclude?: string[];
 	/** Output mode: "tui" (interactive Ink dashboard) or "json" (NDJSON for programmatic use). */
 	output?: "tui" | "json";
+	/** Shell command to run on game completion. */
+	onComplete?: string;
+	/** Built-in notification sink: "stdout" or "file:<path>". */
+	notify?: string;
 }
 
 /**
@@ -809,6 +813,12 @@ export class Commands {
 				? { include: opts.include, exclude: opts.exclude }
 				: undefined;
 
+		// Build notification config from --on-complete / --notify
+		const notifyConfig =
+			opts.onComplete || opts.notify
+				? { onComplete: opts.onComplete, notify: opts.notify }
+				: undefined;
+
 		const playConfig: PlayConfig = {
 			...config,
 			agentModel,
@@ -817,13 +827,162 @@ export class Commands {
 			refereeThinking: (opts.refereeThinking ?? "high") as any,
 			apiKey: oauthApiKey,
 			pathFilter,
+			notify: notifyConfig,
 		};
 
-		if (opts.output === "json") {
-			return this.playJson(resolvedPath, playConfig);
+		// Start web dashboard alongside autonomous play if requested
+		if (opts.web) {
+			const dashboard = await ensureDashboardRunning();
+			if (opts.output !== "json") {
+				console.log(`\n🌐 API Server: ${dashboard.api.url}`);
+				console.log(`📊 Dashboard:  ${dashboard.url}\n`);
+			}
 		}
 
-		return this.playTui(resolvedPath, playConfig);
+		if (opts.output === "json") {
+			return this.playJson(resolvedPath, playConfig, opts.web);
+		}
+
+		return this.playTui(resolvedPath, playConfig, opts.web);
+	}
+
+	/**
+	 * Lists recent games for a project, formatted as a history table.
+	 *
+	 * @param projectPath - Project path to filter by (resolved to absolute)
+	 * @param limit - Maximum results (default: 20)
+	 * @returns JSON array of historical games
+	 */
+	history(projectPath: string, limit: number = 20): string {
+		const resolvedPath = resolve(projectPath);
+		const games = this.orchestrator.getHistory(resolvedPath, limit);
+
+		if (games.length === 0) {
+			return JSON.stringify({
+				message: `No games found for project: ${resolvedPath}`,
+				project: resolvedPath,
+			});
+		}
+
+		return JSON.stringify(
+			{
+				project: resolvedPath,
+				games: games.map((g) => ({
+					id: g.id,
+					category: g.category,
+					phase: g.phase,
+					round: g.round,
+					winner: g.winnerId,
+					targetScore: g.config.targetScore,
+					createdAt: g.createdAt.toISOString(),
+					completedAt: g.completedAt?.toISOString() ?? null,
+				})),
+			},
+			null,
+			2,
+		);
+	}
+
+	/**
+	 * Compares findings between two game runs.
+	 * Shows new issues, resolved issues, and recurring issues.
+	 *
+	 * @param gameId1 - First (older) game ID
+	 * @param gameId2 - Second (newer) game ID
+	 * @returns JSON diff with categorized findings
+	 */
+	diff(gameId1: string, gameId2: string): string {
+		const result = this.orchestrator.diffGames(gameId1, gameId2);
+
+		return JSON.stringify(
+			{
+				summary: result.summary,
+				game1: {
+					id: result.game1.id,
+					category: result.game1.category,
+					createdAt: result.game1.createdAt.toISOString(),
+				},
+				game2: {
+					id: result.game2.id,
+					category: result.game2.category,
+					createdAt: result.game2.createdAt.toISOString(),
+				},
+				newIssues: result.newIssues.map((f) => ({
+					id: f.id,
+					file: f.filePath,
+					lines: `${f.lineStart}-${f.lineEnd}`,
+					description: f.description,
+				})),
+				resolvedIssues: result.resolvedIssues.map((f) => ({
+					id: f.id,
+					file: f.filePath,
+					lines: `${f.lineStart}-${f.lineEnd}`,
+					description: f.description,
+				})),
+				recurringIssues: result.recurringIssues.map((r) => ({
+					file: r.game1Finding.filePath,
+					game1Lines: `${r.game1Finding.lineStart}-${r.game1Finding.lineEnd}`,
+					game2Lines: `${r.game2Finding.lineStart}-${r.game2Finding.lineEnd}`,
+					description: r.game2Finding.description,
+				})),
+			},
+			null,
+			2,
+		);
+	}
+
+	/**
+	 * Generates scheduling configuration for unattended runs.
+	 *
+	 * @param projectPath - Project path
+	 * @param opts - Schedule options
+	 * @returns JSON with generated files and instructions
+	 */
+	schedule(
+		projectPath: string,
+		opts: {
+			preset?: string;
+			category?: string;
+			agents?: string;
+			target?: string;
+			maxRounds?: string;
+		},
+	): string {
+		const { generateSchedule } = require("../services/Scheduler.js") as {
+			generateSchedule: typeof import("../services/Scheduler.js").generateSchedule;
+		};
+
+		const result = generateSchedule({
+			projectPath: resolve(projectPath),
+			preset: (opts.preset as "nightly" | "weekly") ?? "nightly",
+			category: opts.category ?? "bugs",
+			agents: opts.agents ? parseInt(opts.agents, 10) : undefined,
+			target: opts.target ? parseInt(opts.target, 10) : undefined,
+			maxRounds: opts.maxRounds ? parseInt(opts.maxRounds, 10) : undefined,
+		});
+
+		// Write generated files
+		const { mkdirSync, writeFileSync, chmodSync } =
+			require("node:fs") as typeof import("node:fs");
+		const { dirname } = require("node:path") as typeof import("node:path");
+
+		for (const file of result.files) {
+			mkdirSync(dirname(file.path), { recursive: true });
+			writeFileSync(file.path, file.content);
+			if (file.path.endsWith(".sh")) {
+				chmodSync(file.path, 0o755);
+			}
+		}
+
+		return JSON.stringify(
+			{
+				platform: result.platform,
+				files: result.files.map((f) => f.path),
+				instructions: result.instructions,
+			},
+			null,
+			2,
+		);
 	}
 
 	/**
@@ -836,6 +995,7 @@ export class Commands {
 	private async playTui(
 		projectPath: string,
 		playConfig: PlayConfig,
+		web?: boolean,
 	): Promise<string> {
 		const runner = new GameRunner(this.orchestrator, projectPath, {
 			silent: true,
@@ -858,6 +1018,10 @@ export class Commands {
 
 		for await (const event of runner.play(playConfig)) {
 			emitter.emit("game-event", event);
+
+			if (web && event.type === "game_created") {
+				console.log(`📊 Game:  ${getDashboardUrl(event.gameId)}\n`);
+			}
 
 			if (event.type === "game_complete") {
 				result = JSON.stringify(
@@ -894,6 +1058,7 @@ export class Commands {
 	private async playJson(
 		projectPath: string,
 		playConfig: PlayConfig,
+		web?: boolean,
 	): Promise<string> {
 		const runner = new GameRunner(this.orchestrator, projectPath, {
 			silent: true,
@@ -915,6 +1080,7 @@ export class Commands {
 						event: "game_created",
 						gameId: event.gameId,
 						agents: event.agents,
+						...(web ? { dashboard: getDashboardUrl(event.gameId) } : {}),
 					});
 					break;
 

@@ -4,6 +4,7 @@
  * and Scorer (point calculations). This is the public API that CLI, server, and tools use.
  */
 
+import type { Finding } from "../domain/Finding.js";
 import type { Game } from "../domain/Game.js";
 import type {
 	Confidence,
@@ -59,6 +60,25 @@ export interface ExportResult {
 	gameId: string;
 	outputDir: string;
 	files: string[];
+}
+
+/** Result of comparing findings between two game runs. */
+export interface DiffResult {
+	readonly game1: Game;
+	readonly game2: Game;
+	readonly newIssues: Finding[];
+	readonly resolvedIssues: Finding[];
+	readonly recurringIssues: ReadonlyArray<{
+		readonly game1Finding: Finding;
+		readonly game2Finding: Finding;
+	}>;
+	readonly summary: {
+		readonly game1ValidCount: number;
+		readonly game2ValidCount: number;
+		readonly newCount: number;
+		readonly resolvedCount: number;
+		readonly recurringCount: number;
+	};
 }
 
 /**
@@ -344,6 +364,83 @@ export class Orchestrator {
 	/** Lists all disputes for a game. */
 	getDisputes(gameId: string) {
 		return this.disputeRepo.findByGameId(gameId);
+	}
+
+	// =========================================================================
+	// History & Diff
+	// =========================================================================
+
+	/**
+	 * Lists recent games for a project, providing run history.
+	 *
+	 * @param projectUrl - Project URL or path to filter by
+	 * @param limit - Maximum results (default: 20)
+	 * @returns Games matching the project, most recent first
+	 */
+	getHistory(projectUrl: string, limit: number = 20): Game[] {
+		return this.gameRepo.findByProject(projectUrl, limit);
+	}
+
+	/**
+	 * Compares findings between two game runs.
+	 * Identifies new issues, resolved issues, and recurring issues.
+	 *
+	 * @param gameId1 - First (older) game ID
+	 * @param gameId2 - Second (newer) game ID
+	 * @returns Diff result with categorized findings
+	 */
+	diffGames(gameId1: string, gameId2: string): DiffResult {
+		const game1 = this.requireGame(gameId1);
+		const game2 = this.requireGame(gameId2);
+
+		const findings1 = this.findingRepo
+			.findByGameId(gameId1)
+			.filter((f) => f.isValid);
+		const findings2 = this.findingRepo
+			.findByGameId(gameId2)
+			.filter((f) => f.isValid);
+
+		// Match findings by file path + overlapping line ranges
+		const recurring: Array<{
+			game1Finding: (typeof findings1)[0];
+			game2Finding: (typeof findings2)[0];
+		}> = [];
+		const matchedFrom1 = new Set<number>();
+		const matchedFrom2 = new Set<number>();
+
+		for (const f1 of findings1) {
+			for (const f2 of findings2) {
+				if (matchedFrom2.has(f2.id)) continue;
+				if (
+					f1.filePath === f2.filePath &&
+					f1.lineStart <= f2.lineEnd &&
+					f1.lineEnd >= f2.lineStart
+				) {
+					recurring.push({ game1Finding: f1, game2Finding: f2 });
+					matchedFrom1.add(f1.id);
+					matchedFrom2.add(f2.id);
+					break;
+				}
+			}
+		}
+
+		const resolvedIssues = findings1.filter((f) => !matchedFrom1.has(f.id));
+		const newIssues = findings2.filter((f) => !matchedFrom2.has(f.id));
+
+		return {
+			game1,
+			game2,
+			newIssues,
+			resolvedIssues,
+			recurringIssues: recurring,
+			summary: {
+				game1ValidCount: findings1.length,
+				game2ValidCount: findings2.length,
+				newCount: newIssues.length,
+				resolvedCount: resolvedIssues.length,
+				recurringCount: recurring.length,
+			},
+		};
 	}
 
 	// =========================================================================

@@ -1,5 +1,5 @@
-import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
+import { defineConfig } from "astro/config";
 
 const SITE_URL = "https://dungle-scrubs.github.io/bones";
 const SITE_TITLE = "Bones";
@@ -28,7 +28,10 @@ export default defineConfig({
 				// OG Meta
 				{
 					tag: "meta",
-					attrs: { property: "og:image", content: `${SITE_URL}/images/og-image.png` },
+					attrs: {
+						property: "og:image",
+						content: `${SITE_URL}/images/og-image.png`,
+					},
 				},
 				{
 					tag: "meta",
@@ -49,7 +52,10 @@ export default defineConfig({
 				},
 				{
 					tag: "meta",
-					attrs: { name: "twitter:image", content: `${SITE_URL}/images/og-image.png` },
+					attrs: {
+						name: "twitter:image",
+						content: `${SITE_URL}/images/og-image.png`,
+					},
 				},
 				// Apple Touch Icon
 				{
