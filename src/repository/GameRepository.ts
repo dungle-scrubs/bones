@@ -159,6 +159,42 @@ export class GameRepository {
 	}
 
 	/**
+	 * Finds all completed games for a given project URL.
+	 * Used by `bones history` to show past runs for a project.
+	 *
+	 * @param projectUrl - Project URL or path to filter by
+	 * @param limit - Maximum results (default: 20)
+	 * @returns Games matching the project, most recent first
+	 */
+	findByProject(projectUrl: string, limit: number = 20): Game[] {
+		const stmt = this.db.connection.prepare(`
+      SELECT * FROM games
+      WHERE project_url = ?
+      ORDER BY created_at DESC
+      LIMIT ?
+    `);
+		const rows = stmt.all(projectUrl, limit) as GameRow[];
+		return rows.map((row) => Game.fromRow(row));
+	}
+
+	/**
+	 * Retrieves multiple games by their IDs.
+	 * Used by `bones diff` to load two games for comparison.
+	 *
+	 * @param ids - Array of game IDs to load
+	 * @returns Found games (order not guaranteed)
+	 */
+	findByIds(ids: readonly string[]): Game[] {
+		if (ids.length === 0) return [];
+		const placeholders = ids.map(() => "?").join(",");
+		const stmt = this.db.connection.prepare(`
+      SELECT * FROM games WHERE id IN (${placeholders})
+    `);
+		const rows = stmt.all(...ids) as GameRow[];
+		return rows.map((row) => Game.fromRow(row));
+	}
+
+	/**
 	 * Deletes a game and all related data (agents, findings, disputes).
 	 * Uses CASCADE delete defined in schema foreign keys.
 	 */
